@@ -437,10 +437,10 @@ LORA_REGISTRY: dict[str, dict] = {
         "category": "general_quality",
         "architecture": "flux",
         "base_hf": "Shakker-Labs/FLUX.1-dev-LoRA-add-details",
-        "file_name": "FLUX.1-dev-LoRA-add-details.safetensors",
+        "file_name": "FLUX-dev-lora-add_details.safetensors",
         "download_url": (
             "https://huggingface.co/Shakker-Labs/FLUX.1-dev-LoRA-add-details/"
-            "resolve/main/FLUX.1-dev-LoRA-add-details.safetensors"
+            "resolve/main/FLUX-dev-lora-add_details.safetensors"
         ),
         "target_path": "/persistent/loras/flux/FLUX.1-dev-LoRA-add-details.safetensors",
         "default_weight": 1.0,
@@ -457,16 +457,17 @@ LORA_REGISTRY: dict[str, dict] = {
         "category": "general_quality",
         "architecture": "flux",
         "base_hf": "pablobonilla/flux-realistic-lora",
-        "file_name": None,
+        "file_name": "lora.safetensors",
         "download_url": (
             "https://huggingface.co/pablobonilla/flux-realistic-lora/resolve/main/"
+            "lora.safetensors"
         ),
         "target_path": "/persistent/loras/flux/flux-realistic-lora.safetensors",
         "default_weight": 0.8,
         "license": "flux-1-dev-non-commercial-license",
         "commercial_use": False,
         "note": (
-            "FLUX.1-dev 写实摄影 LoRA。file_name 待确认,下载前请先 ls 仓库确认实际文件名。"
+            "FLUX.1-dev 写实摄影 LoRA,已确认文件名为 lora.safetensors。"
         ),
     },
 
@@ -480,112 +481,136 @@ LORA_REGISTRY: dict[str, dict] = {
         "name": "Cyberpunk (SDXL)",
         "category": "style",
         "architecture": "sdxl",
-        "base_hf": None,
-        "file_name": None,
-        "download_url": None,
+        "base_hf": "issaccyj/lora-sdxl-cyberpunk",
+        "file_name": "pytorch_lora_weights.safetensors",
+        "download_url": (
+            "https://huggingface.co/issaccyj/lora-sdxl-cyberpunk/resolve/main/"
+            "pytorch_lora_weights.safetensors"
+        ),
         "target_path": "/persistent/loras/sdxl/cyberpunk.safetensors",
         "default_weight": 0.8,
-        "license": "unknown",
-        "commercial_use": "unknown",
-        "note": "待补充:从 Civitai 挑选 Cyberpunk 主题 LoRA 并填入 download_url。",
+        "license": "openrail++",
+        "commercial_use": True,
+        "note": "Cyberpunk 风格 LoRA,触发词: cyberpunk style。",
     },
     "sdxl_anime": {
         "id": "sdxl_anime",
         "name": "Anime Style (SDXL)",
         "category": "style",
         "architecture": "sdxl",
-        "base_hf": None,
-        "file_name": None,
-        "download_url": None,
+        "base_hf": "DarkAngelH/Models_100_AnimeLoRA_SDXL",
+        "file_name": "anime_sdxl_v1.safetensors",
+        "download_url": (
+            "https://huggingface.co/DarkAngelH/Models_100_AnimeLoRA_SDXL/resolve/main/"
+            "anime_sdxl_v1.safetensors"
+        ),
         "target_path": "/persistent/loras/sdxl/anime.safetensors",
         "default_weight": 0.7,
-        "license": "unknown",
-        "commercial_use": "unknown",
-        "note": "待补充:Anime 系底座 (NoobAI/Illustrious) 自带 anime,此 LoRA 用于非 anime 底座。",
+        "license": "openrail++",
+        "commercial_use": True,
+        "note": "通用 Anime 风 LoRA,用于 Lightning 等非 anime 底座。",
     },
     "sdxl_watercolor": {
         "id": "sdxl_watercolor",
         "name": "Watercolor (SDXL)",
         "category": "style",
         "architecture": "sdxl",
-        "base_hf": None,
-        "file_name": None,
-        "download_url": None,
+        "base_hf": "ostris/watercolor_style_lora_sdxl",
+        "file_name": "watercolor_v1_sdxl.safetensors",
+        "download_url": (
+            "https://huggingface.co/ostris/watercolor_style_lora_sdxl/resolve/main/"
+            "watercolor_v1_sdxl.safetensors"
+        ),
         "target_path": "/persistent/loras/sdxl/watercolor.safetensors",
         "default_weight": 0.8,
-        "license": "unknown",
-        "commercial_use": "unknown",
-        "note": "待补充:Watercolor 风格 LoRA。",
+        "license": "apache_2_0",
+        "commercial_use": True,
+        "note": "水彩风格 LoRA,无需触发词,自动转换。",
     },
     "sdxl_oil_painting": {
         "id": "sdxl_oil_painting",
         "name": "Oil Painting (SDXL)",
         "category": "style",
         "architecture": "sdxl",
-        "base_hf": None,
-        "file_name": None,
-        "download_url": None,
+        "base_hf": "chuckma/sdxl-oil-painting-lora",
+        "file_name": "oil-painting.safetensors",
+        "download_url": (
+            "https://huggingface.co/chuckma/sdxl-oil-painting-lora/resolve/main/"
+            "oil-painting.safetensors"
+        ),
         "target_path": "/persistent/loras/sdxl/oil_painting.safetensors",
         "default_weight": 0.8,
-        "license": "unknown",
-        "commercial_use": "unknown",
-        "note": "待补充:Oil Painting 风格 LoRA。",
+        "license": "apache_2_0",
+        "commercial_use": True,
+        "note": "油画风格 LoRA,触发词: oil painting style。",
     },
     "sdxl_3d_render": {
         "id": "sdxl_3d_render",
         "name": "3D Render (SDXL)",
         "category": "style",
         "architecture": "sdxl",
-        "base_hf": None,
-        "file_name": None,
-        "download_url": None,
+        "base_hf": "suholee/3dAnimation-SDXL-LoRA-v1-50",
+        "file_name": "3dAnimation-SDXL-LoRA-v1-50.safetensors",
+        "download_url": (
+            "https://huggingface.co/suholee/3dAnimation-SDXL-LoRA-v1-50/resolve/main/"
+            "3dAnimation-SDXL-LoRA-v1-50.safetensors"
+        ),
         "target_path": "/persistent/loras/sdxl/3d_render.safetensors",
         "default_weight": 0.8,
-        "license": "unknown",
-        "commercial_use": "unknown",
-        "note": "待补充:3D 渲染风格 LoRA。",
+        "license": "openrail++",
+        "commercial_use": True,
+        "note": "3D 动画渲染风格 LoRA,触发词: 3d rendering style。",
     },
     "sdxl_pixel_art": {
         "id": "sdxl_pixel_art",
         "name": "Pixel Art (SDXL)",
         "category": "style",
         "architecture": "sdxl",
-        "base_hf": None,
-        "file_name": None,
-        "download_url": None,
+        "base_hf": "nerijs/pixel-art-xl",
+        "file_name": "pixel-art-xl.safetensors",
+        "download_url": (
+            "https://huggingface.co/nerijs/pixel-art-xl/resolve/main/"
+            "pixel-art-xl.safetensors"
+        ),
         "target_path": "/persistent/loras/sdxl/pixel_art.safetensors",
         "default_weight": 0.8,
-        "license": "unknown",
-        "commercial_use": "unknown",
-        "note": "待补充:Pixel Art 风格 LoRA。",
+        "license": "creativeml-openrail-m",
+        "commercial_use": True,
+        "note": "像素风 LoRA,生成后需 8x 下采样 (Nearest) 获得像素效果。",
     },
     "sdxl_concept_art": {
         "id": "sdxl_concept_art",
         "name": "Concept Art (SDXL)",
         "category": "style",
         "architecture": "sdxl",
-        "base_hf": None,
-        "file_name": None,
-        "download_url": None,
+        "base_hf": "nncyberpunk/SDXL1.0_LoRA_ConceptArt_EclipseStyle_Pony",
+        "file_name": "SDXL1.0_LoRA_ConceptArt_EclipseStyle_Pony.safetensors",
+        "download_url": (
+            "https://huggingface.co/nncyberpunk/SDXL1.0_LoRA_ConceptArt_EclipseStyle_Pony/"
+            "resolve/main/SDXL1.0_LoRA_ConceptArt_EclipseStyle_Pony.safetensors"
+        ),
         "target_path": "/persistent/loras/sdxl/concept_art.safetensors",
         "default_weight": 0.8,
-        "license": "unknown",
-        "commercial_use": "unknown",
-        "note": "待补充:Concept Art 风格 LoRA。",
+        "license": "openrail++",
+        "commercial_use": True,
+        "note": "概念艺术/黄昏风格 LoRA,适用于 SDXL 底座。",
     },
     "sdxl_minimalist": {
         "id": "sdxl_minimalist",
         "name": "Minimalist (SDXL)",
         "category": "style",
         "architecture": "sdxl",
-        "base_hf": None,
-        "file_name": None,
-        "download_url": None,
+        "base_hf": "e-n-v-y/envy-shadow-minimalism-xl-01",
+        "file_name": "EnvyShadowMinimalismXL01.safetensors",
+        "download_url": (
+            "https://huggingface.co/e-n-v-y/envy-shadow-minimalism-xl-01/resolve/main/"
+            "EnvyShadowMinimalismXL01.safetensors"
+        ),
         "target_path": "/persistent/loras/sdxl/minimalist.safetensors",
         "default_weight": 0.8,
-        "license": "unknown",
+        "license": "bespoke-lora-trained-license",
         "commercial_use": "unknown",
-        "note": "待补充:Minimalist 风格 LoRA。",
+        "note": "极简主义/阴影风格 LoRA,适用于建筑、人物剪影等。",
     },
 }
 
