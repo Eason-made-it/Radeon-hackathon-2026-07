@@ -30,14 +30,12 @@ MODEL_REGISTRY: dict[str, dict] = {
         "commercial_use": True,
         "vram_gb": 7,
         "is_distilled": True,
+        "single_file_checkpoint": "sdxl_lightning_4step.safetensors",
         "supports_img2img": True,
         "supports_strength": True,
         "default_params": {
             "num_inference_steps": 4,
             "guidance_scale": 1.5,
-            # Lightning 需要加载 base SDXL + 蒸馏 UNet
-            "base_model": "stabilityai/stable-diffusion-xl-base-1.0",
-            "unet_subfolder": "4step/unet",
             "negative_prompt": (
                 "lowres, bad anatomy, bad hands, text, error, missing fingers, "
                 "extra digit, fewer digits, cropped, worst quality, low quality, "
@@ -62,13 +60,12 @@ MODEL_REGISTRY: dict[str, dict] = {
         "commercial_use": True,
         "vram_gb": 7,
         "is_distilled": True,
+        "single_file_checkpoint": "sdxl_lightning_8step.safetensors",
         "supports_img2img": True,
         "supports_strength": True,
         "default_params": {
             "num_inference_steps": 8,
             "guidance_scale": 2.0,
-            "base_model": "stabilityai/stable-diffusion-xl-base-1.0",
-            "unet_subfolder": "8step/unet",
             "negative_prompt": (
                 "lowres, bad anatomy, bad hands, text, error, missing fingers, "
                 "extra digit, fewer digits, cropped, worst quality, low quality, "

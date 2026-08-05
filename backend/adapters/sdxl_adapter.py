@@ -101,36 +101,25 @@ class SDXLAdapter(BaseModelAdapter):
         is_lightning = self.model_config.get("is_distilled", False)
         defaults = self.get_default_params()
 
-        if is_lightning and "base_model" in defaults:
-            # === Lightning 路径: base SDXL + 蒸馏 UNet + Euler 调度器 ===
-            from diffusers import UNet2DConditionModel, EulerDiscreteScheduler
+        if is_lightning and self.model_config.get("single_file_checkpoint"):
+            # === Lightning 路径: 单文件 checkpoint (from_single_file) ===
+            from diffusers import EulerDiscreteScheduler
 
-            base_model = defaults["base_model"]
-            unet_subfolder = defaults.get("unet_subfolder", "4step")
+            checkpoint_name = self.model_config["single_file_checkpoint"]
+            repo_id = f"{self.model_config['hf_path']}/{checkpoint_name}"
 
             logger.info(
-                f"[{self.model_id}] Loading Lightning UNet from "
-                f"{self.model_config['hf_path']}/{unet_subfolder}"
+                f"[{self.model_id}] Loading Lightning from single-file checkpoint: "
+                f"{repo_id}"
             )
-            unet = UNet2DConditionModel.from_pretrained(
-                self.model_config["hf_path"],
-                subfolder=unet_subfolder,
-                torch_dtype=self._dtype,
-            )
-
-            logger.info(f"[{self.model_id}] Loading base SDXL from {base_model}")
-            self._pipe = StableDiffusionXLPipeline.from_pretrained(
-                base_model,
-                unet=unet,
+            self._pipe = StableDiffusionXLPipeline.from_single_file(
+                repo_id,
                 torch_dtype=self._dtype,
             ).to(self._device)
 
             # Lightning 推荐 EulerDiscreteScheduler
             self._pipe.scheduler = EulerDiscreteScheduler.from_config(
                 self._pipe.scheduler.config
-            )
-            logger.info(
-                f"[{self.model_id}] Scheduler set to EulerDiscreteScheduler"
             )
         else:
             # === 常规 SDXL 路径 (Animagine / Illustrious) ===
