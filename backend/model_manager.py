@@ -35,6 +35,7 @@ from config import (
     RATIO_MAPPINGS,
     ARCHITECTURE_RATIO_FAMILY,
     LICENSE_INFO,
+    DEFAULT_FAST_MODEL_ID,
 )
 from adapters import ADAPTER_REGISTRY
 
@@ -179,6 +180,21 @@ class ModelManager:
             self._current_adapter is not None
             and self._current_adapter.is_loaded()
         )
+
+    def load_default(self) -> dict:
+        """
+        加载默认快速模型 (SDXL-Lightning 4-step)。
+
+        启动时由 FluxEngine.load() 调用。如果已有模型加载则跳过。
+
+        Returns:
+            当前模型信息 (get_current_model_info() 结果)
+        """
+        if self.is_loaded():
+            logger.info("Default model already loaded, skipping")
+            return self.get_current_model_info()
+        logger.info(f"Loading default model: {DEFAULT_FAST_MODEL_ID}")
+        return self.switch_model(DEFAULT_FAST_MODEL_ID)
 
     # ------------------------------------------------------------------
     # 模型切换 (带回滚保护)
