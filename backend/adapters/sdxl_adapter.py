@@ -102,19 +102,28 @@ class SDXLAdapter(BaseModelAdapter):
         defaults = self.get_default_params()
 
         if is_lightning and self.model_config.get("single_file_checkpoint"):
-            # === Lightning 路径: 单文件 checkpoint (from_single_file) ===
+            # === Lightning 路径: 单文件 checkpoint (hf_hub_download + from_single_file) ===
             from diffusers import EulerDiscreteScheduler
+            from huggingface_hub import hf_hub_download
 
-            checkpoint_name = self.model_config["single_file_checkpoint"]
-            repo_id = f"{self.model_config['hf_path']}/{checkpoint_name}"
+            repo_id = self.model_config["hf_path"]
+            filename = self.model_config["single_file_checkpoint"]
 
             logger.info(
-                f"[{self.model_id}] Loading Lightning from single-file checkpoint: "
-                f"{repo_id}"
+                f"[{self.model_id}] Downloading Lightning single-file checkpoint: "
+                f"{repo_id}/{filename}"
             )
+            # hf_hub_download 自动读取 HF_ENDPOINT / HF_TOKEN / HF_HOME 环境变量
+            ckpt_path = hf_hub_download(
+                repo_id=repo_id,
+                filename=filename,
+            )
+            logger.info(f"[{self.model_id}] Downloaded to: {ckpt_path}")
+
             self._pipe = StableDiffusionXLPipeline.from_single_file(
-                repo_id,
+                ckpt_path,
                 torch_dtype=self._dtype,
+                use_safetensors=True,
             ).to(self._device)
 
             # Lightning 推荐 EulerDiscreteScheduler
