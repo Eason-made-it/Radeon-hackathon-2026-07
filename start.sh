@@ -9,16 +9,22 @@ set -e
 
 echo "============================================"
 echo "  NodeFlow — GPU 实例部署脚本"
-echo "  AMD Radeon GPU + Flux schnell"
+echo "  AMD Radeon GPU + SDXL-Lightning / FLUX.2-klein"
 echo "============================================"
 echo ""
 
-# ---- 配置 ----
-BACKEND_DIR="/workspace/ai-canvas/backend"
-FRONTEND_DIR="/workspace/ai-canvas/frontend"
+# ---- 配置 (自适应路径: 以脚本所在目录为项目根) ----
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+BACKEND_DIR="$PROJECT_ROOT/backend"
+FRONTEND_DIR="$PROJECT_ROOT/frontend"
 VENV_DIR="/persistent/venv"
 BACKEND_PORT=8000
 FRONTEND_PORT=5173
+
+echo "  项目根目录: $PROJECT_ROOT"
+echo "  后端目录:   $BACKEND_DIR"
+echo "  前端目录:   $FRONTEND_DIR"
 
 # ---- Step 1: 检查环境 ----
 echo "[1/6] 检查环境..."
@@ -48,15 +54,23 @@ echo "  ✓ Node.js: $(node --version)"
 
 # ---- 环境变量: HuggingFace 镜像 + Token + 持久化缓存 ----
 # 实例不能直连 huggingface.co，必须走镜像
-# Flux schnell 是 gated repo，需要 token
+# SDXL base + FLUX.2-klein 等 gated repo 需要 token
 export HF_ENDPOINT=https://hf-mirror.com
-# Flux schnell / gated repo 需要 token，从环境变量读取，勿硬编码
-export HF_TOKEN="${HF_TOKEN:-hf_YOUR_HF_TOKEN_HERE}"
+
+# HF_TOKEN: 必须传入真实 token (gated repo 需要)
+# 用法: HF_TOKEN=hf_xxxxx ./start.sh
+if [ -z "$HF_TOKEN" ] || [ "$HF_TOKEN" = "hf_YOUR_HF_TOKEN_HERE" ]; then
+    echo "  ⚠ 警告: HF_TOKEN 未设置或为占位符!"
+    echo "    gated repo (FLUX.2-klein, SDXL base) 下载会失败。"
+    echo "    正确用法: HF_TOKEN=hf_你的token ./start.sh"
+    echo "    继续尝试, 但可能遇到 401 错误..."
+fi
 export HUGGING_FACE_HUB_TOKEN="$HF_TOKEN"
 export HF_HOME=/persistent/hf_cache
 mkdir -p "$HF_HOME"
 echo "  ✓ HF mirror: $HF_ENDPOINT"
 echo "  ✓ HF cache: $HF_HOME"
+echo "  ✓ HF token: ${HF_TOKEN:0:10}..."
 
 # ---- Step 2: 创建/激活虚拟环境 ----
 echo ""
@@ -89,8 +103,8 @@ else:
 
 # ---- Step 4: 启动后端 ----
 echo ""
-echo "[4/6] 启动后端 (FastAPI + Flux schnell)..."
-echo "  首次启动需要下载模型 (~12GB), 请耐心等待..."
+echo "[4/6] 启动后端 (FastAPI + SDXL-Lightning / FLUX.2-klein)..."
+echo "  首次启动需要下载模型 (SDXL base ~7GB + FLUX.2-klein ~8GB), 请耐心等待..."
 cd "$BACKEND_DIR"
 uvicorn main:app --host 0.0.0.0 --port $BACKEND_PORT &
 BACKEND_PID=$!

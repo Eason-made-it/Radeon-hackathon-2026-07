@@ -1,13 +1,15 @@
 #!/bin/bash
 # ============================================================
-# NodeFlow — 文件恢复脚本 (GPU 实例重置后使用)
-# 
-# 此脚本不再创建旧版文件,仅用于检查环境
+# NodeFlow — 环境检查脚本 (GPU 实例启动前使用)
+# 检查项目文件和运行环境是否就绪
 # 实际部署请使用 start.sh
 # ============================================================
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "============================================"
 echo "  NodeFlow — 环境检查"
+echo "  项目目录: $SCRIPT_DIR"
 echo "============================================"
 echo ""
 
@@ -16,22 +18,22 @@ echo "[1] 检查项目文件..."
 BACKEND_OK=false
 FRONTEND_OK=false
 
-if [ -f "/workspace/ai-canvas/backend/main.py" ]; then
-    echo "  ✓ 后端代码存在: /workspace/ai-canvas/backend/"
+if [ -f "$SCRIPT_DIR/backend/main.py" ]; then
+    echo "  ✓ 后端代码存在: $SCRIPT_DIR/backend/"
     BACKEND_OK=true
 else
     echo "  ✗ 后端代码缺失! 需要从 Git 恢复"
 fi
 
-if [ -f "/workspace/open-canvas/package.json" ]; then
-    echo "  ✓ 前端代码存在: /workspace/open-canvas/"
+if [ -f "$SCRIPT_DIR/frontend/package.json" ]; then
+    echo "  ✓ 前端代码存在: $SCRIPT_DIR/frontend/"
     FRONTEND_OK=true
 else
     echo "  ✗ 前端代码缺失! 需要从 Git 恢复"
 fi
 
-if [ -f "/workspace/ai-canvas/start.sh" ]; then
-    echo "  ✓ 启动脚本存在: /workspace/ai-canvas/start.sh"
+if [ -f "$SCRIPT_DIR/start.sh" ]; then
+    echo "  ✓ 启动脚本存在: $SCRIPT_DIR/start.sh"
 else
     echo "  ⚠ 启动脚本缺失"
 fi
@@ -57,17 +59,29 @@ else
     echo "  PyTorch CUDA: ✗ (need to install requirements.txt)"
 fi
 
+# 检查 HF_TOKEN
+echo ""
+echo "[3] 检查 HuggingFace Token..."
+if [ -n "$HF_TOKEN" ] && [ "$HF_TOKEN" != "hf_YOUR_HF_TOKEN_HERE" ]; then
+    echo "  ✓ HF_TOKEN 已设置: ${HF_TOKEN:0:10}..."
+else
+    echo "  ⚠ HF_TOKEN 未设置! gated repo 下载会失败"
+    echo "    用法: export HF_TOKEN=hf_你的token && ./start.sh"
+fi
+
 echo ""
 if [ "$BACKEND_OK" = true ] && [ "$FRONTEND_OK" = true ]; then
     echo "============================================"
     echo "  环境检查完成! 运行 start.sh 开始部署:"
-    echo "    cd /workspace/ai-canvas && ./start.sh"
+    echo "    cd $SCRIPT_DIR"
+    echo "    HF_TOKEN=hf_你的token ./start.sh"
     echo "============================================"
 else
     echo "============================================"
-    echo "  部分文件缺失! 请从 Git 恢复:"
+    echo "  部分文件缺失! 请从 Git 克隆项目:"
     echo "    cd /workspace"
-    echo "    git clone <your-repo> open-canvas"
-    echo "    git clone <your-repo> ai-canvas"
+    echo "    git clone https://github.com/Eason-made-it/Radeon-hackathon-2026-07.git nodeflow"
+    echo "    cd nodeflow"
+    echo "    HF_TOKEN=hf_你的token ./start.sh"
     echo "============================================"
 fi
