@@ -8,6 +8,7 @@
 ## Table of Contents
 
 - [Overview](#overview)
+- [Demo Video](#demo-video)
 - [Key Features](#key-features)
 - [Tech Stack](#tech-stack)
 - [System Architecture](#system-architecture)
@@ -16,6 +17,17 @@
 - [API Reference](#api-reference)
 - [Models & LoRA](#models--lora)
 - [License](#license)
+
+---
+
+## Demo Video
+
+▶️ **`NodeFlow_Demo.mp4`** — the final 3–5 minute demo video for the AMD AI DevMaster Hackathon 2026 (Track 1).
+
+It demonstrates the tool running natively on an AMD Radeon GPU (ROCm): canvas sketching, sketch-to-art, text-to-image, Fast/Expert dual-mode speed comparison, multi-model hot-switching, and LoRA tuning — with real generation timings shown on screen.
+
+> The video file is stored in this repository. Download it from:
+> `https://github.com/Eason-made-it/Radeon-hackathon-2026-07/blob/main/NodeFlow_Demo.mp4`
 
 ---
 
