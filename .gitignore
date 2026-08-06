@@ -9,8 +9,16 @@ venv/
 
 # ---- Node / 前端构建产物 ----
 node_modules/
-frontend/dist/
 frontend/node_modules/
+
+# dist 中需要入库的原始 UI 文件 (排除构建产物与备份)
+frontend/dist/*
+!frontend/dist/index.html
+!frontend/dist/assets/
+frontend/dist/assets/*
+!frontend/dist/assets/canvas-runtime.js
+!frontend/dist/assets/mock-api.js
+!frontend/dist/assets/nodeflow-app.js
 
 # ---- 模型与大数据（不入库）----
 *.safetensors

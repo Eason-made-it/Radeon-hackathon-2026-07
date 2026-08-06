@@ -75,6 +75,47 @@ engine = FluxEngine()
 
 
 # ---------------------------------------------------------------------------
+# LoRA 临时加载/卸载辅助函数 (免模式限制)
+# ---------------------------------------------------------------------------
+
+def _apply_temporary_loras(
+    lora_paths: list[str],
+    weights: Optional[list[float]] = None,
+) -> list[str]:
+    """
+    在生成前加载临时 LoRA,返回 lora_id 列表。
+    生成结束后应调用 _cleanup_temporary_loras() 清理。
+
+    Args:
+        lora_paths: LoRA 文件路径列表
+        weights: 对应权重列表 (None 则使用默认权重 0.8)
+
+    Returns:
+        已加载的 lora_id 列表
+    """
+    loaded: list[str] = []
+    for i, path in enumerate(lora_paths):
+        w = weights[i] if weights and i < len(weights) else 0.8
+        try:
+            lid = engine.load_lora(path=path, weight=w)
+            loaded.append(lid)
+            logger.info("Temporary LoRA loaded: %s (weight=%.2f)", lid, w)
+        except Exception as e:
+            logger.warning("Failed to load temporary LoRA %s: %s", path, e)
+    return loaded
+
+
+def _cleanup_temporary_loras(lora_ids: list[str]) -> None:
+    """生成后清理临时 LoRA。"""
+    for lid in lora_ids:
+        try:
+            engine.unload_lora(lid)
+            logger.info("Temporary LoRA unloaded: %s", lid)
+        except Exception as e:
+            logger.warning("Failed to unload temporary LoRA %s: %s", lid, e)
+
+
+# ---------------------------------------------------------------------------
 # 启动事件
 # ---------------------------------------------------------------------------
 @app.on_event("startup")
@@ -484,7 +525,10 @@ class TextToImageRequest(BaseModel):
     seed: Optional[int] = Field(default=None, ge=0, description="随机种子")
     negative_prompt: Optional[str] = Field(default=None, max_length=MAX_PROMPT_LENGTH)
     loras: Optional[list[str]] = Field(
-        default=None, description="LoRA 标识列表 (Expert 可选)"
+        default=None, description="LoRA 文件路径列表 (所有模式均可用)"
+    )
+    lora_weights: Optional[list[float]] = Field(
+        default=None, description="LoRA 权重列表 (仅 Expert 模式生效;Fast 模式使用默认权重)"
     )
 
 
@@ -526,8 +570,6 @@ async def generate_from_text(req: TextToImageRequest) -> JSONResponse:
             params["seed"] = req.seed
         if req.negative_prompt:
             params["negative_prompt"] = req.negative_prompt
-        if req.loras:
-            params["loras"] = req.loras
     else:
         # fast 模式:专家参数被忽略,给出告警
         ignored: list[str] = []
@@ -539,12 +581,18 @@ async def generate_from_text(req: TextToImageRequest) -> JSONResponse:
             ignored.append("seed")
         if req.negative_prompt:
             ignored.append("negative_prompt")
-        if req.loras:
-            ignored.append("loras")
+        if req.lora_weights:
+            ignored.append("lora_weights")
         if ignored:
             warnings.append(
                 f"Expert parameters ({', '.join(ignored)}) are ignored in fast mode"
             )
+
+    # LoRA 全局可用 (不限模式);权重仅在 expert 模式自定义
+    temp_loras: list[str] = []
+    if req.loras:
+        lora_weights = req.lora_weights if req.mode == "expert" else None
+        temp_loras = _apply_temporary_loras(req.loras, lora_weights)
 
     logger.info(
         "text2img: mode=%s prompt=%r style=%s size=%dx%d params=%s",
@@ -560,10 +608,15 @@ async def generate_from_text(req: TextToImageRequest) -> JSONResponse:
     try:
         result = engine.generate_from_text(prompt=req.prompt, style=req.style, **params)
     except ValueError as exc:
+        _cleanup_temporary_loras(temp_loras)
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:  # noqa: BLE001
         logger.error("text2img failed: %s", exc, exc_info=True)
+        _cleanup_temporary_loras(temp_loras)
         raise HTTPException(status_code=500, detail=f"Generation failed: {exc}")
+
+    # 生成成功后清理临时 LoRA
+    _cleanup_temporary_loras(temp_loras)
     elapsed = time.time() - start_ts
 
     # 5) 当前模型信息 (切换后)
@@ -606,12 +659,14 @@ async def generate_from_image(
     seed: Optional[int] = Form(None),
     negative_prompt: Optional[str] = Form(None),
     loras: Optional[list[str]] = Form(None),
+    lora_weights: Optional[str] = Form(None),
 ) -> JSONResponse:
     """
     图生图: 上传图片 → 风格化生成 (Form 字段,因为要传文件)
 
     快速版 (fast): 少步模型,忽略 expert 字段。
     专家版 (expert): 可自定义步数/引导/种子/负向提示/LoRA。
+    LoRA 在所有模式均可用,权重仅在 expert 模式自定义。
     """
     if mode not in SUPPORTED_MODES:
         raise HTTPException(
@@ -665,8 +720,6 @@ async def generate_from_image(
             params["seed"] = seed
         if negative_prompt:
             params["negative_prompt"] = negative_prompt
-        if loras:
-            params["loras"] = loras
     else:
         ignored: list[str] = []
         if num_inference_steps is not None:
@@ -677,12 +730,23 @@ async def generate_from_image(
             ignored.append("seed")
         if negative_prompt:
             ignored.append("negative_prompt")
-        if loras:
-            ignored.append("loras")
+        if lora_weights:
+            ignored.append("lora_weights")
         if ignored:
             warnings.append(
                 f"Expert parameters ({', '.join(ignored)}) are ignored in fast mode"
             )
+
+    # 6) LoRA 全局可用 (不限模式)
+    temp_loras: list[str] = []
+    if loras:
+        parsed_weights: Optional[list[float]] = None
+        if mode == "expert" and lora_weights:
+            try:
+                parsed_weights = [float(w.strip()) for w in lora_weights.split(",")]
+            except (ValueError, TypeError):
+                warnings.append("lora_weights 解析失败,使用默认权重 0.8")
+        temp_loras = _apply_temporary_loras(loras, parsed_weights)
 
     logger.info(
         "img2img: mode=%s file=%s size=%dx%d style=%s strength=%.2f",
@@ -698,10 +762,15 @@ async def generate_from_image(
     try:
         result = engine.generate_from_image(image=image, style=style, **params)
     except ValueError as exc:
+        _cleanup_temporary_loras(temp_loras)
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:  # noqa: BLE001
         logger.error("img2img failed: %s", exc, exc_info=True)
+        _cleanup_temporary_loras(temp_loras)
         raise HTTPException(status_code=500, detail=f"Generation failed: {exc}")
+
+    # 生成成功后清理临时 LoRA
+    _cleanup_temporary_loras(temp_loras)
     elapsed = time.time() - start_ts
 
     try:

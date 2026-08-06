@@ -20,7 +20,6 @@ BACKEND_DIR="$PROJECT_ROOT/backend"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 VENV_DIR="/persistent/venv"
 BACKEND_PORT=8000
-FRONTEND_PORT=5173
 
 echo "  项目根目录: $PROJECT_ROOT"
 echo "  后端目录:   $BACKEND_DIR"
@@ -124,54 +123,32 @@ for i in $(seq 1 180); do
     fi
 done
 
-# ---- Step 5: 安装前端依赖 ----
+# ---- Step 5: 前端说明 ----
 echo ""
-echo "[5/6] 配置前端 (React + Excalidraw)..."
-cd "$FRONTEND_DIR"
-if [ ! -d "node_modules" ]; then
-    echo "  安装 npm 依赖 (可能需要几分钟)..."
-    npm install --legacy-peer-deps 2>&1 | tail -5
-else
-    echo "  ✓ node_modules 已存在, 跳过安装"
-fi
+echo "[5/6] 前端"
+echo "  前端由后端 FastAPI 直接提供 (挂载 frontend/dist 静态文件)"
+echo "  无需单独启动 Vite。访问 http://localhost:$BACKEND_PORT 即可。"
 
-# ---- Step 6: 启动前端 ----
+# ---- Step 6: 完成 ----
 echo ""
-echo "[6/6] 启动前端 (Vite + React)..."
-cd "$FRONTEND_DIR"
-npm run dev &
-FRONTEND_PID=$!
-echo "  前端 PID: $FRONTEND_PID"
-
-# 等待前端就绪
-echo "  等待前端启动..."
-for i in $(seq 1 30); do
-    if curl -s http://localhost:$FRONTEND_PORT > /dev/null 2>&1; then
-        echo "  ✓ 前端就绪!"
-        break
-    fi
-    sleep 2
-done
-
-# ---- 完成 ----
+echo "[6/6] 完成"
 echo ""
 echo "============================================"
 echo "  NodeFlow 已启动!"
 echo "============================================"
 echo ""
-echo "  前端: http://localhost:$FRONTEND_PORT"
-echo "  后端: http://localhost:$BACKEND_PORT"
-echo "  健康检查: http://localhost:$BACKEND_PORT/api/health"
+echo "  前端 + 后端: http://localhost:$BACKEND_PORT"
+echo "  健康检查:     http://localhost:$BACKEND_PORT/api/health"
 echo ""
 echo "  SSH 端口转发 (在本地电脑终端运行):"
-echo "    ssh -L ${FRONTEND_PORT}:localhost:${FRONTEND_PORT} -L ${BACKEND_PORT}:localhost:${BACKEND_PORT} <user>@<gpu-ip>"
+echo "    ssh -L ${BACKEND_PORT}:localhost:${BACKEND_PORT} <user>@<gpu-ip>"
 echo ""
-echo "  然后在浏览器打开: http://localhost:${FRONTEND_PORT}"
+echo "  然后在浏览器打开: http://localhost:${BACKEND_PORT}"
 echo ""
-echo "  停止服务: kill $BACKEND_PID $FRONTEND_PID"
+echo "  停止服务: kill $BACKEND_PID"
 echo "  或按 Ctrl+C 退出"
 echo ""
 
 # 退出时清理
-trap "echo 'Shutting down...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit" INT TERM
+trap "echo 'Shutting down...'; kill $BACKEND_PID 2>/dev/null; exit" INT TERM
 wait
