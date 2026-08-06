@@ -769,12 +769,26 @@
     return null;
   }
 
+  /* 检查 Sage Attention 加速节点 (PatchSageAttentionKJ) 是否可用。
+   * ComfyUI 对不存在的节点类返回 4xx, 对存在的返回 200。 */
+  function sageAttentionAvailable() {
+    return fetch(COMFYUI_BASE + '/object_info/PatchSageAttentionKJ')
+      .then(function (r) { return r.ok; })
+      .catch(function () { return false; });
+  }
+
   /* ── 本地 ComfyUI 引擎: 视频 (MiniMax H3 T2V) ──────────────── */
   function runComfyUIVideo(body) {
     return isComfyUIReachable().then(function (ok) {
       if (!ok || !USE_COMFYUI) return null;
-      return uploadComfyUIImage(body.first_frame_image).then(function (ref) {
-        var graph = buildH3Workflow(body, ref);
+      /* 加速节点不可用时自动降级为不加速, 避免工作流校验失败 */
+      return sageAttentionAvailable().then(function (hasSage) {
+        var effective = Object.assign({}, body);
+        if (!hasSage && effective.accelerate) {
+          effective.accelerate = false;
+        }
+        return uploadComfyUIImage(effective.first_frame_image).then(function (ref) {
+        var graph = buildH3Workflow(effective, ref);
         return submitComfyUIPrompt(graph).then(function (res) {
           if (!res || !res.prompt_id) {
             var msg = (res && res.error) ? (res.error.message || JSON.stringify(res.error)) : 'ComfyUI 提交失败';
@@ -794,6 +808,7 @@
             };
           });
         });
+      });
       });
     }).catch(function () {
       return null; /* 回退 mock 占位 */
