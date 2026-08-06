@@ -199,74 +199,17 @@
   /* ════════════════════════════════════════
    * 2. ContextMenu — right-click / double-click (updated structure)
    * ════════════════════════════════════════ */
+  /* ════════════════════════════════════════
+   * 2. ContextMenu — DISABLED (menus owned by nodeflow-app.js)
+   * ════════════════════════════════════════
+   * nodeflow-app.js's setupContextMenu owns ALL add-node menu entry points:
+   *   - right-click on empty canvas
+   *   - double-click on empty canvas
+   *   - dragging out of a connection port (connection-point quick menu)
+   * All of them open ONE unified menu (showAddNodeMenu). This legacy menu is
+   * intentionally a no-op so no duplicate "unknown" menu DOM ever appears. */
   function initContextMenu() {
-    var region = document.getElementById('excalidraw-canvas-region');
-    if (!region || document.querySelector('.nf-context-menu')) return;
-
-    var menu = document.createElement('div');
-    menu.className = 'nf-context-menu';
-    menu.innerHTML =
-      '<div class="nf-ctx-header">添加节点</div>' +
-      '<button class="nf-ctx-item" data-node="text"><i data-lucide="type"></i><span>文本节点</span></button>' +
-      '<button class="nf-ctx-item" data-node="sketch"><i data-lucide="pen-tool"></i><span>草图节点</span></button>' +
-      '<button class="nf-ctx-item" data-node="image"><i data-lucide="image"></i><span>图片节点</span></button>' +
-      '<button class="nf-ctx-item" data-node="note"><i data-lucide="sticky-note"></i><span>便签</span></button>' +
-      '<div class="nf-ctx-sep"></div>' +
-      '<button class="nf-ctx-item" data-node="mindmap"><i data-lucide="git-branch"></i><span>脑图节点</span></button>' +
-      '<button class="nf-ctx-item" data-node="flow"><i data-lucide="workflow"></i><span>流程图节点</span></button>' +
-      '<div class="nf-ctx-header" style="margin-top:4px;">添加资源</div>' +
-      '<button class="nf-ctx-item" data-action="upload"><i data-lucide="upload"></i><span>上传文件</span></button>' +
-      '<button class="nf-ctx-item" data-action="canvas-import"><i data-lucide="mouse-pointer-click"></i><span>从画布导入</span></button>' +
-      '<button class="nf-ctx-item" data-action="history"><i data-lucide="history"></i><span>从生成历史选择</span></button>';
-    document.body.appendChild(menu);
-
-    function showMenu(x, y) {
-      var mw = 200, mh = 380;
-      if (x + mw > window.innerWidth) x = window.innerWidth - mw - 8;
-      if (y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
-      menu.style.left = x + 'px';
-      menu.style.top = y + 'px';
-      menu.classList.add('nf-ctx-visible');
-    }
-    function hideMenu() { menu.classList.remove('nf-ctx-visible'); }
-
-    region.addEventListener('contextmenu', function (e) {
-      e.preventDefault();
-      showMenu(e.clientX, e.clientY);
-    });
-    region.addEventListener('dblclick', function (e) {
-      /* Show menu on any double-click in canvas that's not on a node or interactive element */
-      if (e.target.closest('.nf-canvas-node') || e.target.closest('button') || e.target.closest('input') || e.target.closest('[contenteditable]')) return;
-      showMenu(e.clientX, e.clientY);
-    });
-    document.addEventListener('click', function (e) {
-      if (!menu.contains(e.target)) hideMenu();
-    });
-
-    menu.addEventListener('click', function (e) {
-      var item = e.target.closest('.nf-ctx-item');
-      if (!item) return;
-      var nodeType = item.getAttribute('data-node');
-      var action = item.getAttribute('data-action');
-      var label = item.querySelector('span').textContent;
-
-      var r = region.getBoundingClientRect();
-      var px = parseFloat(menu.style.left) - r.left;
-      var py = parseFloat(menu.style.top) - r.top;
-
-      if (nodeType) {
-        var icon = item.querySelector('[data-lucide]') ? item.querySelector('[data-lucide]').getAttribute('data-lucide') : 'square';
-        createNode(nodeType, label, icon, px, py);
-        showToast('已添加 ' + label);
-      } else if (action === 'upload') {
-        triggerUpload(px, py);
-      } else if (action === 'canvas-import') {
-        enterCanvasImportMode();
-      } else if (action === 'history') {
-        showToast('生成历史 — 即将上线');
-      }
-      hideMenu();
-    });
+    /* no-op — nodeflow-app.js owns context & dbl-click menus. */
   }
 
   /* ════════════════════════════════════════
@@ -588,84 +531,11 @@
     var region = document.getElementById('excalidraw-canvas-region');
     if (!region) return;
 
-    /* SVG must be inside content layer so coordinates match nodes */
-    var content = region.querySelector('.canvas-content-layer');
-    if (!content) return;
-
-    var svgNS = 'http://www.w3.org/2000/svg';
-    var svg = document.createElementNS(svgNS, 'svg');
-    svg.setAttribute('class', 'nf-connections-svg');
-    svg.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:1px;pointer-events:none;z-index:6;overflow:visible;';
-    content.appendChild(svg);
-
-    var defs = document.createElementNS(svgNS, 'defs');
-    var grad = document.createElementNS(svgNS, 'linearGradient');
-    grad.setAttribute('id', 'nf-conn-grad');
-    grad.setAttribute('x1', '0%'); grad.setAttribute('y1', '0%');
-    grad.setAttribute('x2', '100%'); grad.setAttribute('y2', '0%');
-    var gs1 = document.createElementNS(svgNS, 'stop');
-    gs1.setAttribute('offset', '0%'); gs1.setAttribute('stop-color', '#ffffff');
-    var gs2 = document.createElementNS(svgNS, 'stop');
-    gs2.setAttribute('offset', '100%'); gs2.setAttribute('stop-color', '#999999');
-    grad.appendChild(gs1); grad.appendChild(gs2); defs.appendChild(grad);
-    svg.appendChild(defs);
-
-    /* Temp connection line during drag */
-    var tempPath = document.createElementNS(svgNS, 'path');
-    tempPath.setAttribute('stroke', '#ffffff');
-    tempPath.setAttribute('stroke-width', '2');
-    tempPath.setAttribute('fill', 'none');
-    tempPath.setAttribute('stroke-dasharray', '6 4');
-    tempPath.setAttribute('opacity', '0.7');
-    tempPath.style.display = 'none';
-    svg.appendChild(tempPath);
-
-    state.connSvg = svg;
-    state.tempPath = tempPath;
-
-    /* Port interaction — drag to connect */
-    document.addEventListener('mousedown', function (e) {
-      var port = e.target.closest('.nf-node-port');
-      if (!port) return;
-      var node = port.closest('.nf-canvas-node');
-      if (!node) return;
-      var portType = port.getAttribute('data-port');
-      if (portType === 'in') return; /* Only drag from output */
-
-      state.connectMode = true;
-      state.connectSource = node;
-      port.style.transform = 'translateY(-50%) scale(1.4)';
-      port.style.background = 'var(--nf-text-1)';
-      e.preventDefault();
-      e.stopPropagation();
-    });
-
-    document.addEventListener('mousemove', function (e) {
-      if (!state.connectMode || !state.connectSource) return;
-      var region = document.getElementById('excalidraw-canvas-region');
-      var r = region.getBoundingClientRect();
-      var fromPos = getPortPos(state.connectSource, 'out');
-      var toX = (e.clientX - r.left - state.panX) / state.zoom;
-      var toY = (e.clientY - r.top - state.panY) / state.zoom;
-      state.tempPath.setAttribute('d', getBezierPath(fromPos.x, fromPos.y, toX, toY));
-      state.tempPath.style.display = 'block';
-    });
-
-    document.addEventListener('mouseup', function (e) {
-      if (!state.connectMode) return;
-      var targetNode = e.target.closest('.nf-canvas-node');
-      if (targetNode && targetNode !== state.connectSource) {
-        createConnection(state.connectSource, targetNode);
-      }
-      state.connectMode = false;
-      state.connectSource = null;
-      state.tempPath.style.display = 'none';
-      /* Reset port styles */
-      document.querySelectorAll('.nf-node-port').forEach(function (p) {
-        p.style.transform = '';
-        p.style.background = '';
-      });
-    });
+    /* NOTE: connection rendering & drag-to-connect are owned entirely by
+       nodeflow-app.js (nf-connections-svg + startConnectionDrag). This legacy
+       layer no longer creates a duplicate SVG, so there is exactly ONE
+       connection model and ONE rendered layer. connectMode stays false and
+       the legacy temp path is removed. */
 
     /* Click empty canvas to deselect */
     region.addEventListener('click', function (e) {
@@ -701,43 +571,12 @@
   function createConnection(fromNode, toNode) {
     var fromId = fromNode.getAttribute('data-node-id');
     var toId = toNode.getAttribute('data-node-id');
-    /* Check if connection already exists */
-    var exists = state.connections.some(function (c) { return c.from === fromId && c.to === toId; });
-    if (exists) { showToast('已存在连接'); return; }
-
-    var svgNS = 'http://www.w3.org/2000/svg';
-    var path = document.createElementNS(svgNS, 'path');
-    path.setAttribute('stroke', 'url(#nf-conn-grad)');
-    path.setAttribute('stroke-width', '2.5');
-    path.setAttribute('fill', 'none');
-    path.setAttribute('stroke-linecap', 'round');
-    path.style.pointerEvents = 'stroke';
-    path.style.cursor = 'pointer';
-    state.connSvg.appendChild(path);
-
-    /* Midpoint handle for deletion */
-    var handle = document.createElementNS(svgNS, 'circle');
-    handle.setAttribute('r', '5');
-    handle.setAttribute('fill', 'var(--nf-ink-2)');
-    handle.setAttribute('stroke', 'var(--nf-text-1)');
-    handle.setAttribute('stroke-width', '1.5');
-    handle.style.pointerEvents = 'all';
-    handle.style.cursor = 'pointer';
-    handle.style.transition = 'transform 150ms';
-    state.connSvg.appendChild(handle);
-
-    var conn = { from: fromId, to: toId, fromNode: fromNode, toNode: toNode, pathEl: path, handleEl: handle };
-    state.connections.push(conn);
-
-    /* Click handle to delete */
-    handle.addEventListener('click', function (e) {
-      e.stopPropagation();
-      removeConnection(conn);
-      showToast('已删除连接');
-    });
-
-    redrawConnections();
-    showToast('已连接节点');
+    if (!fromId || !toId || fromId === toId) return;
+    /* Delegate to nodeflow-app's single connection system so there is only one
+       connection model and one rendered layer (no duplicate lines). */
+    if (window.NF && NF.app && typeof NF.app.addConnection === 'function') {
+      NF.app.addConnection(fromId, toId);
+    }
   }
 
   function removeConnection(conn) {
@@ -825,7 +664,7 @@
         deselectAllNodes();
         if (state.connectMode) {
           state.connectMode = false; state.connectSource = null;
-          state.tempPath.style.display = 'none';
+          if (state.tempPath) state.tempPath.style.display = 'none';
         }
         if (state.importMode) exitCanvasImportMode();
         if (state.quickConnectMode) toggleQuickConnect();
@@ -1682,11 +1521,23 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
 .zoom-sep{width:16px;height:1px;background:var(--nf-glass-border);margin:2px 0;}
 .zoom-label{font-size:10px;color:var(--nf-text-3);padding:2px 0;text-align:center;font-variant-numeric:tabular-nums;}
 
-/* Minimap */
-.nf-minimap{position:absolute;left:26px;bottom:26px;z-index:21;width:180px;height:120px;background:var(--nf-ink-2);border:1px solid var(--nf-glass-border);border-radius:var(--nf-radius-medium);overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.5);animation:nf-dock-in .5s cubic-bezier(.22,1,.36,1) .4s both;}
+/* Minimap — collapsed trigger + expandable panel (kept clear of toolbar/dock) */
+.nf-minimap-wrap{position:absolute;left:20px;bottom:20px;z-index:30;}
+.nf-minimap-trigger{width:34px;height:34px;border:none;border-radius:var(--nf-radius-full);background:var(--nf-ink-2);border:1px solid var(--nf-glass-border);color:var(--nf-text-2);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.4);transition:background-color 150ms,color 150ms,transform 120ms;}
+.nf-minimap-trigger:hover{background:var(--nf-text-1);color:var(--nf-ink-0);transform:translateY(-1px);}
+.nf-minimap-trigger.is-active{background:var(--nf-text-1);color:var(--nf-ink-0);}
+.nf-minimap{position:absolute;left:-6px;bottom:44px;width:220px;height:150px;background:var(--nf-ink-2);border:1px solid var(--nf-glass-border-hi);border-radius:var(--nf-radius-medium);overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,.55);opacity:0;transform:translateY(8px) scale(.96);pointer-events:none;transition:opacity 180ms ease,transform 180ms ease;}
+.nf-minimap.is-open{opacity:1;transform:translateY(0) scale(1);pointer-events:auto;}
 .nf-minimap canvas{display:block;width:100%;height:100%;cursor:pointer;}
-.nf-minimap-label{position:absolute;top:4px;left:8px;font-size:9px;color:var(--nf-text-3);text-transform:uppercase;letter-spacing:.05em;pointer-events:none;z-index:2;}
-.nf-minimap-viewport{position:absolute;border:1.5px solid var(--nf-text-1);background:rgba(255,255,255,.06);pointer-events:none;border-radius:2px;z-index:3;transition:none;}
+.nf-minimap-label{position:absolute;top:5px;left:9px;font-size:9px;color:var(--nf-text-3);text-transform:uppercase;letter-spacing:.05em;pointer-events:none;z-index:2;}
+.nf-minimap-count{position:absolute;top:5px;left:50%;transform:translateX(-50%);font-size:9px;color:var(--nf-text-2);letter-spacing:.03em;pointer-events:none;z-index:2;font-variant-numeric:tabular-nums;background:rgba(255,255,255,.05);padding:1px 7px;border-radius:8px;}
+.nf-minimap-viewport{position:absolute;display:none;border:1px solid rgba(255,255,255,.85);background:transparent;box-shadow:0 0 0 9999px rgba(0,0,0,.55);pointer-events:none;border-radius:2px;z-index:3;}
+.nf-minimap-fit{position:absolute;right:5px;top:5px;width:22px;height:22px;border:none;border-radius:6px;background:rgba(255,255,255,.06);color:var(--nf-text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:4;transition:background-color 150ms,color 150ms;}
+.nf-minimap-fit:hover{background:var(--nf-text-1);color:var(--nf-ink-0);}
+/* Floating "return to content" pill — appears when the user pans away and gets lost */
+.nf-return-pill{position:absolute;left:50%;bottom:92px;transform:translateX(-50%) translateY(10px);z-index:29;display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:var(--nf-radius-full);background:var(--nf-ink-2);border:1px solid var(--nf-glass-border-hi);box-shadow:0 8px 24px rgba(0,0,0,.45);color:var(--nf-text-1);font-size:12.5px;font-weight:500;cursor:pointer;opacity:0;pointer-events:none;transition:opacity 200ms,transform 200ms,background-color 150ms,color 150ms;}
+.nf-return-pill.is-visible{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;}
+.nf-return-pill:hover{color:var(--nf-ink-0);background:var(--nf-text-1);}
 
 /* Dock sub-elements — forced identical across all pages */
 #floating-control-dock{display:flex!important;align-items:center!important;gap:14px!important;padding:12px 14px!important;width:auto!important;max-width:none!important;background:var(--nf-ink-2)!important;border:1px solid var(--nf-glass-border-hi)!important;border-radius:var(--nf-radius-large)!important;box-shadow:0 8px 24px rgba(0,0,0,.5)!important;}
@@ -1728,39 +1579,69 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
   function initMinimap() {
     var region = document.getElementById('excalidraw-canvas-region');
     if (!region) return;
-    if (region.querySelector('.nf-minimap')) return;
+    if (region.querySelector('.nf-minimap-wrap')) return;
 
-    var container = document.createElement('div');
-    container.className = 'nf-minimap';
-    container.innerHTML =
-      '<span class="nf-minimap-label">Minimap</span>' +
-      '<canvas width="180" height="120"></canvas>' +
-      '<div class="nf-minimap-viewport"></div>';
-    region.appendChild(container);
+    var content = region.querySelector('.canvas-content-layer');
 
+    /* Collapsed trigger + expandable panel */
+    var wrap = document.createElement('div');
+    wrap.className = 'nf-minimap-wrap';
+    wrap.innerHTML =
+      '<button type="button" class="nf-minimap-trigger" aria-label="Minimap" title="画布总览">' +
+        '<i data-lucide="map" width="16" height="16"></i>' +
+      '</button>' +
+      '<div class="nf-minimap">' +
+        '<span class="nf-minimap-label">Minimap</span>' +
+        '<span class="nf-minimap-count">0 节点</span>' +
+        '<canvas width="220" height="150"></canvas>' +
+        '<div class="nf-minimap-viewport"></div>' +
+        '<button type="button" class="nf-minimap-fit" aria-label="Fit to content" title="回到内容">' +
+          '<i data-lucide="maximize" width="13" height="13"></i>' +
+        '</button>' +
+      '</div>';
+    region.appendChild(wrap);
+
+    var container = wrap.querySelector('.nf-minimap');
+    var trigger = wrap.querySelector('.nf-minimap-trigger');
     var canvas = container.querySelector('canvas');
     var ctx = canvas.getContext('2d');
     var viewport = container.querySelector('.nf-minimap-viewport');
-    var content = region.querySelector('.canvas-content-layer');
+    var fitBtn = container.querySelector('.nf-minimap-fit');
 
-    /* Bounds of all nodes in content-space */
+    /* Floating "return to content" pill — appears when the user pans away and gets lost */
+    var returnPill = document.createElement('div');
+    returnPill.className = 'nf-return-pill';
+    returnPill.innerHTML = '<i data-lucide="locate-fixed" width="14" height="14"></i><span>回到内容</span>';
+    region.appendChild(returnPill);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    /* Open/collapse on click + hover */
+    function open() { container.classList.add('is-open'); trigger.classList.add('is-active'); draw(); }
+    function close() { container.classList.remove('is-open'); trigger.classList.remove('is-active'); }
+    trigger.addEventListener('click', function (e) { e.stopPropagation(); container.classList.contains('is-open') ? close() : open(); });
+    trigger.addEventListener('mouseenter', open);
+    container.addEventListener('mouseenter', open);
+    container.addEventListener('mouseleave', function (e) { if (!wrap.contains(e.relatedTarget)) close(); });
+    document.addEventListener('mousedown', function (e) { if (!wrap.contains(e.target)) close(); });
+
+    /* Read node geometry directly from content coords (robust regardless of zoom/pan or minimap visibility) */
+    function getNodes() {
+      return content ? content.querySelectorAll('.nf-canvas-node, .prompt-node, .result-node, .sketch-node') : [];
+    }
     function getContentBounds() {
-      var nodes = content ? content.querySelectorAll('.nf-canvas-node, .prompt-node, .result-node, .sketch-node') : [];
-      if (nodes.length === 0) return { minX: 0, minY: 0, maxX: 800, maxY: 600 };
+      var nodes = getNodes();
+      if (!nodes.length) return { minX: 0, minY: 0, maxX: 800, maxY: 600 };
       var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       nodes.forEach(function (n) {
-        var rect = n.getBoundingClientRect();
-        /* Convert screen coords to content coords by dividing by zoom and subtracting pan */
-        var cx = (rect.left - region.getBoundingClientRect().left - state.panX) / state.zoom;
-        var cy = (rect.top - region.getBoundingClientRect().top - state.panY) / state.zoom;
-        var cw = rect.width / state.zoom;
-        var ch = rect.height / state.zoom;
-        if (cx < minX) minX = cx;
-        if (cy < minY) minY = cy;
-        if (cx + cw > maxX) maxX = cx + cw;
-        if (cy + ch > maxY) maxY = cy + ch;
+        var x = parseFloat(n.style.left) || 0;
+        var y = parseFloat(n.style.top) || 0;
+        var w = n.offsetWidth || 0;
+        var h = n.offsetHeight || 0;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x + w > maxX) maxX = x + w;
+        if (y + h > maxY) maxY = y + h;
       });
-      /* Add padding */
       var pad = 60;
       return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
     }
@@ -1770,6 +1651,13 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
       ctx.fillStyle = '#0a0a0a';
       ctx.fillRect(0, 0, w, h);
 
+      var nodes = getNodes();
+      var countEl = container.querySelector('.nf-minimap-count');
+      if (countEl) countEl.textContent = nodes.length + ' 节点';
+
+      /* Fit the whole content into the minimap so node sizes and relative
+         positions are always visible, independent of the zoom level.
+         The viewport rectangle below then shows where you are. */
       var bounds = getContentBounds();
       var bw = bounds.maxX - bounds.minX;
       var bh = bounds.maxY - bounds.minY;
@@ -1778,31 +1666,33 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
       var offX = (w - bw * scale) / 2;
       var offY = (h - bh * scale) / 2;
 
-      /* Draw nodes */
-      var nodes = content ? content.querySelectorAll('.nf-canvas-node, .prompt-node, .result-node, .sketch-node') : [];
+      /* Nodes */
       nodes.forEach(function (n) {
-        var rect = n.getBoundingClientRect();
-        var cx = (rect.left - region.getBoundingClientRect().left - state.panX) / state.zoom;
-        var cy = (rect.top - region.getBoundingClientRect().top - state.panY) / state.zoom;
-        var cw = rect.width / state.zoom;
-        var ch = rect.height / state.zoom;
-        var x = offX + (cx - bounds.minX) * scale;
-        var y = offY + (cy - bounds.minY) * scale;
-        ctx.fillStyle = n.classList.contains('nf-selected') ? '#ffffff' : '#333333';
-        ctx.fillRect(x, y, Math.max(2, cw * scale), Math.max(2, ch * scale));
+        var x = parseFloat(n.style.left) || 0;
+        var y = parseFloat(n.style.top) || 0;
+        var cw = n.offsetWidth || 0;
+        var ch = n.offsetHeight || 0;
+        var px = offX + (x - bounds.minX) * scale;
+        var py = offY + (y - bounds.minY) * scale;
+        var rw = Math.max(3, cw * scale);
+        var rh = Math.max(3, ch * scale);
+        ctx.fillStyle = n.classList.contains('nf-selected') || n.classList.contains('is-selected') ? '#ffffff' : '#8b93a1';
+        ctx.fillRect(px - rw / 2, py - rh / 2, Math.max(3, rw + 4), Math.max(3, rh + 4));
       });
 
-      /* Draw connections */
-      if (state.connections && state.connections.length > 0) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      /* Connections — read from nodeflow-app's single connection model */
+      var nfConns = (window.NF && NF.app && NF.app.state && NF.app.state.connections) ? NF.app.state.connections : [];
+      if (nfConns.length > 0) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)';
         ctx.lineWidth = 1;
-        state.connections.forEach(function (conn) {
-          var from = getPortPos(conn.fromNode, 'out');
-          var to = getPortPos(conn.toNode, 'in');
-          var fx = offX + (from.x - bounds.minX) * scale;
-          var fy = offY + (from.y - bounds.minY) * scale;
-          var tx = offX + (to.x - bounds.minX) * scale;
-          var ty = offY + (to.y - bounds.minY) * scale;
+        nfConns.forEach(function (conn) {
+          var fromEl = document.querySelector('[data-node-id="' + conn.from + '"]');
+          var toEl = document.querySelector('[data-node-id="' + conn.to + '"]');
+          if (!fromEl || !toEl) return;
+          var fx = offX + (parseFloat(fromEl.style.left) + fromEl.offsetWidth - bounds.minX) * scale;
+          var fy = offY + (parseFloat(fromEl.style.top) + fromEl.offsetHeight / 2 - bounds.minY) * scale;
+          var tx = offX + (parseFloat(toEl.style.left) - bounds.minX) * scale;
+          var ty = offY + (parseFloat(toEl.style.top) + toEl.offsetHeight / 2 - bounds.minY) * scale;
           ctx.beginPath();
           ctx.moveTo(fx, fy);
           ctx.lineTo(tx, ty);
@@ -1810,7 +1700,11 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
         });
       }
 
-      /* Draw viewport rectangle */
+      /* Viewport rectangle — shows the current zoom/pan window.
+         It shrinks when zoomed in and grows when zoomed out.
+         IMPORTANT: we clamp it inside the minimap so it is ALWAYS visible,
+         even when the current viewport is larger than the content bounds
+         (e.g. few/empty content or heavy zoom-out). Reference: excalidraw. */
       var r = region.getBoundingClientRect();
       var vw = r.width / state.zoom;
       var vh = r.height / state.zoom;
@@ -1820,13 +1714,34 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
       var ry = offY + (vy - bounds.minY) * scale;
       var rw = vw * scale;
       var rh = vh * scale;
-      viewport.style.left = rx + 'px';
-      viewport.style.top = ry + 'px';
-      viewport.style.width = Math.max(4, rw) + 'px';
-      viewport.style.height = Math.max(4, rh) + 'px';
+
+      /* Physical minimap draw area — use the container's real client size
+         (viewport rect is absolutely positioned inside the .nf-minimap). */
+      var mw = container.clientWidth || canvas.width;
+      var mh = container.clientHeight || canvas.height;
+
+      /* Effective viewport size inside minimap — never larger than the map */
+      var evw = Math.min(rw, mw);
+      var evh = Math.min(rh, mh);
+
+      /* Clamp the top-left corner so the viewport rect stays fully on the map.
+         When the viewport is bigger than the map, center it on the content. */
+      var minLeft = 0, minTop = 0;
+      var maxLeft = mw - evw, maxTop = mh - evh;
+      var cl = rx, ct = ry;
+      if (evw >= mw) cl = (mw - evw) / 2;      /* viewport covers whole width → center */
+      else cl = Math.max(minLeft, Math.min(maxLeft, rx));
+      if (evh >= mh) ct = (mh - evh) / 2;      /* viewport covers whole height → center */
+      else ct = Math.max(minTop, Math.min(maxTop, ry));
+
+      viewport.style.display = 'block';
+      viewport.style.left = cl + 'px';
+      viewport.style.top = ct + 'px';
+      viewport.style.width = Math.max(4, evw) + 'px';
+      viewport.style.height = Math.max(4, evh) + 'px';
     }
 
-    /* Click/drag to navigate */
+    /* Click/drag on minimap to navigate */
     var dragging = false;
     function navigateTo(e) {
       var rect = canvas.getBoundingClientRect();
@@ -1838,53 +1753,77 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
       var scale = Math.min(canvas.width / bw, canvas.height / bh);
       var offX = (canvas.width - bw * scale) / 2;
       var offY = (canvas.height - bh * scale) / 2;
-      /* Convert minimap coords to content coords */
       var cx = (mx - offX) / scale + bounds.minX;
       var cy = (my - offY) / scale + bounds.minY;
-      /* Center viewport on this point */
       var r = region.getBoundingClientRect();
       state.panX = r.width / 2 - cx * state.zoom;
       state.panY = r.height / 2 - cy * state.zoom;
-      /* Trigger apply via custom event */
-      region.dispatchEvent(new CustomEvent('nf-minimap-navigate'));
+      applyCanvas();
+      scheduleDraw();
     }
-
-    canvas.addEventListener('mousedown', function (e) {
-      dragging = true;
-      navigateTo(e);
-      e.preventDefault();
-    });
-    document.addEventListener('mousemove', function (e) {
-      if (dragging) navigateTo(e);
-    });
+    canvas.addEventListener('mousedown', function (e) { dragging = true; navigateTo(e); e.preventDefault(); });
+    document.addEventListener('mousemove', function (e) { if (dragging) navigateTo(e); });
     document.addEventListener('mouseup', function () { dragging = false; });
 
-    /* Listen for canvas changes to redraw */
+    /* Apply the transform to the content layer — mirrors the canvas controller's apply() */
+    function applyCanvas() {
+      var c = region.querySelector('.canvas-content-layer');
+      if (!c) return;
+      c.style.transition = 'transform 0.15s ease-out';
+      c.style.transform = 'translate3d(' + state.panX + 'px,' + state.panY + 'px,0) scale(' + state.zoom + ')';
+      var label = document.querySelector('.zoom-label');
+      if (label) label.textContent = Math.round(state.zoom * 100) + '%';
+      if (typeof redrawConnections === 'function') redrawConnections();
+      updateReturnPill();
+    }
+
+    /* Recenter + zoom so the whole content fits in view */
+    function fitToContent() {
+      var bounds = getContentBounds();
+      var r = region.getBoundingClientRect();
+      var bw = bounds.maxX - bounds.minX;
+      var bh = bounds.maxY - bounds.minY;
+      if (bw <= 0 || bh <= 0) return;
+      var zoom = Math.min(r.width / bw, r.height / bh, 1.5);
+      state.zoom = Math.max(0.25, Math.min(2, zoom));
+      state.panX = r.width / 2 - ((bounds.minX + bounds.maxX) / 2) * state.zoom;
+      state.panY = r.height / 2 - ((bounds.minY + bounds.maxY) / 2) * state.zoom;
+      applyCanvas();
+      scheduleDraw();
+    }
+    fitBtn.addEventListener('click', function (e) { e.stopPropagation(); fitToContent(); });
+    returnPill.addEventListener('click', function () { fitToContent(); });
+
+    /* Show the return pill whenever content is fully outside the current viewport */
+    function updateReturnPill() {
+      var bounds = getContentBounds();
+      var r = region.getBoundingClientRect();
+      var vx = -state.panX / state.zoom;
+      var vy = -state.panY / state.zoom;
+      var vw = r.width / state.zoom;
+      var vh = r.height / state.zoom;
+      var overlap = !(bounds.maxX < vx || bounds.minX > vx + vw || bounds.maxY < vy || bounds.minY > vy + vh);
+      returnPill.classList.toggle('is-visible', !overlap);
+    }
+
+    /* Schedule redraws */
     var redrawTimer = null;
     function scheduleDraw() {
       if (redrawTimer) clearTimeout(redrawTimer);
-      redrawTimer = setTimeout(draw, 50);
+      redrawTimer = setTimeout(function () {
+        draw();
+        updateReturnPill();
+      }, 50);
     }
 
-    /* Hook into the apply function via custom event */
-    region.addEventListener('nf-minimap-navigate', function () {
-      var content = region.querySelector('.canvas-content-layer');
-      if (content) {
-        content.style.transition = 'transform 0.15s ease-out';
-        content.style.transform = 'translate3d(' + state.panX + 'px,' + state.panY + 'px,0) scale(' + state.zoom + ')';
-        var label = document.querySelector('.zoom-label');
-        if (label) label.textContent = Math.round(state.zoom * 100) + '%';
-      }
-      scheduleDraw();
-    });
-
-    /* Observe DOM changes for node add/remove */
+    /* Node add/remove/move → redraw */
+    region.addEventListener('nf-nodes-changed', scheduleDraw);
     if (content) {
       var observer = new MutationObserver(scheduleDraw);
       observer.observe(content, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
     }
 
-    /* Redraw on pan/zoom — hook into existing apply via interval check */
+    /* Pan/zoom changes → redraw (interval check mirrors the controller's apply) */
     var lastPan = { x: state.panX, y: state.panY, z: state.zoom };
     setInterval(function () {
       if (lastPan.x !== state.panX || lastPan.y !== state.panY || lastPan.z !== state.zoom) {
@@ -1893,9 +1832,9 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
       }
     }, 100);
 
-    /* Initial draw */
-    setTimeout(draw, 300);
-    /* Redraw on resize */
+    /* Initial draw + resize (draw immediately so count/content are never stale) */
+    draw();
+    updateReturnPill();
     window.addEventListener('resize', scheduleDraw);
   }
 
