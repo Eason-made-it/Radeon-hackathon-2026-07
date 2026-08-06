@@ -129,6 +129,21 @@ echo "[5/6] 前端"
 echo "  前端由后端 FastAPI 直接提供 (挂载 frontend/dist 静态文件)"
 echo "  无需单独启动 Vite。访问 http://localhost:$BACKEND_PORT 即可。"
 
+# ---- Step 5.5: 本地 ComfyUI 校验 (视频 / 高清 / 超分节点需要) ----
+echo ""
+echo "[5.5/6] 本地 ComfyUI"
+echo "  视频生成(MiniMax H3)、高清图、超分修复节点通过前端直连本地 ComfyUI (默认 http://localhost:8188)。"
+echo "  请确认 ComfyUI 已启动并安装了对应自定义节点:"
+echo "    - ComfyUI_MiniMax: MiniMax H3 T2V/I2V 节点"
+echo "    - ComfyUI-KJNodes: Sage Attention 加速 (PatchSageAttentionKJ)"
+if curl -s --max-time 3 http://localhost:8188/system_stats > /dev/null 2>&1; then
+    echo "  ✓ ComfyUI 已就绪 (localhost:8188) — 视频/高清/超分节点可用"
+else
+    echo "  ⚠ 未检测到 ComfyUI (localhost:8188)"
+    echo "    视频/高清/超分节点将回退到 mock 占位预览。"
+    echo "    如需完整功能, 请先启动 ComfyUI, 再在浏览器中访问 http://localhost:8188 确认。"
+fi
+
 # ---- Step 6: 完成 ----
 echo ""
 echo "[6/6] 完成"
@@ -139,6 +154,7 @@ echo "============================================"
 echo ""
 echo "  前端 + 后端: http://localhost:$BACKEND_PORT"
 echo "  健康检查:     http://localhost:$BACKEND_PORT/api/health"
+echo "  ComfyUI:      http://localhost:8188  (视频/高清/超分)"
 echo ""
 echo "  SSH 端口转发 (在本地电脑终端运行):"
 echo "    ssh -L ${BACKEND_PORT}:localhost:${BACKEND_PORT} <user>@<gpu-ip>"

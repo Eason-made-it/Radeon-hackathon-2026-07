@@ -297,22 +297,44 @@
 
     region.addEventListener('contextmenu', function (e) {
       e.preventDefault();
+      e.stopPropagation();
+      showAddNodeMenu(e.clientX, e.clientY);
+    });
+
+    /* 双击空白处同样打开统一菜单（与右键一致） */
+    region.addEventListener('dblclick', function (e) {
+      if (e.target.closest('.nf-canvas-node') || e.target.closest('button') || e.target.closest('input') || e.target.closest('[contenteditable]')) return;
+      e.preventDefault();
       showAddNodeMenu(e.clientX, e.clientY);
     });
   }
 
-  function showAddNodeMenu(x, y) {
+  function showAddNodeMenu(x, y, fromId, reverse) {
     /* Remove existing */
     var old = document.querySelector('.nf-add-node-menu');
     if (old) old.remove();
 
+    /* 屏蔽紧随释放产生的 click，否则菜单一打开就被"点击外部关闭"逻辑关掉 */
+    window.__nfSuppressClick = Date.now();
+
     var menu = document.createElement('div');
     menu.className = 'nf-context-menu nf-add-node-menu';
-    menu.style.cssText = 'position:fixed;left:' + x + 'px;top:' + y + 'px;display:flex;';
+    menu.style.cssText = 'position:fixed;left:' + x + 'px;top:' + y + 'px;display:flex;max-height:78vh;overflow-y:auto;';
     menu.innerHTML =
       '<div class="nf-ctx-header">添加节点</div>' +
-      '<button class="nf-ctx-item" data-type="text"><i data-lucide="type" width="15" height="15"></i>文生图节点</button>' +
-      '<button class="nf-ctx-item" data-type="sketch"><i data-lucide="pencil" width="15" height="15"></i>草图节点</button>';
+      '<button class="nf-ctx-item" data-type="text"><i data-lucide="type" width="15" height="15"></i><span>文生图节点</span></button>' +
+      '<button class="nf-ctx-item" data-type="sketch"><i data-lucide="pencil" width="15" height="15"></i><span>草图节点</span></button>' +
+      '<button class="nf-ctx-item" data-type="hd"><i data-lucide="sparkles" width="15" height="15"></i><span>高清图节点</span></button>' +
+      '<button class="nf-ctx-item" data-type="video"><i data-lucide="video" width="15" height="15"></i><span>视频生成节点</span></button>' +
+      '<button class="nf-ctx-item" data-type="upscale"><i data-lucide="maximize" width="15" height="15"></i><span>超分修复节点</span></button>';
+
+    /* 若从连接点拖出打开的，额外提示会自动连线 */
+    if (fromId) {
+      var hint = document.createElement('div');
+      hint.style.cssText = 'font-size:10px;color:var(--nf-text-3);padding:6px 10px 2px;';
+      hint.textContent = '新节点将自动连线';
+      menu.insertBefore(hint, menu.firstChild);
+    }
 
     document.body.appendChild(menu);
     if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -320,6 +342,7 @@
     menu.querySelectorAll('.nf-ctx-item').forEach(function (item) {
       item.addEventListener('click', function () {
         var region = document.getElementById('excalidraw-canvas-region');
+        if (!region) { menu.remove(); return; }
         var r = region.getBoundingClientRect();
         var content = region.querySelector('.canvas-content-layer');
         var cx = x - r.left, cy = y - r.top;
@@ -331,17 +354,23 @@
             panX = window.nfState.panX || 0;
             panY = window.nfState.panY || 0;
           }
-          cx = (cx - panX) / zoom - 140;
-          cy = (cy - panY) / zoom - 100;
+          cx = (cx - panX) / zoom - 160;
+          cy = (cy - panY) / zoom - 60;
         }
-        addNode(item.getAttribute('data-type'), cx, cy);
+        var node = addNode(item.getAttribute('data-type'), cx, cy);
+        /* 若由连接点拖出打开，自动连线 */
+        if (fromId && node && node.id !== fromId) {
+          if (reverse) addConnection(node.id, fromId);
+          else addConnection(fromId, node.id);
+        }
         menu.remove();
       });
     });
 
-    /* Close on outside click */
+    /* 关闭逻辑：点击外部关闭；但屏蔽释放菜单那一刻紧随的 click */
     setTimeout(function () {
       document.addEventListener('click', function closeMenu(e) {
+        if (window.__nfSuppressClick && (Date.now() - window.__nfSuppressClick) < 350) return;
         if (!menu.contains(e.target)) {
           menu.remove();
           document.removeEventListener('click', closeMenu);
@@ -361,20 +390,52 @@
       x: x || 200,
       y: y || 200,
       width: 320,
-      height: type === 'sketch' ? 380 : 280,
+      height: nodeTypeHeight(type),
       prompt: '',
       strength: 0.8,
       resultImage: null,
+      resultVideo: null,
       status: 'idle',
       seed: null,
       generationTime: null,
-      error: null
+      error: null,
+      /* 高清图节点 */
+      hdSize: '2K',
+      /* 视频节点：MinMax H3 */
+      videoDuration: 5,
+      videoResolution: '768P',
+      videoRatio: '16:9',
+      videoAccelerate: true,
+      /* 超分节点 */
+      upscaleScale: 2,
+      upscaleFaceEnhance: true
     };
     state.nodes.push(node);
     renderNode(node);
     /* Auto-select new node */
     selectNode(id);
     return node;
+  }
+
+  function nodeTypeHeight(type) {
+    switch (type) {
+      case 'sketch': return 380;
+      case 'video': return 360;
+      case 'upscale': return 300;
+      case 'hd': return 300;
+      default: return 280;
+    }
+  }
+
+  function nodeMeta(type) {
+    switch (type) {
+      case 'text': return { label: '文生图', icon: 'type' };
+      case 'sketch': return { label: '草图', icon: 'pencil' };
+      case 'hd': return { label: '高清图', icon: 'sparkles' };
+      case 'video': return { label: '视频生成', icon: 'video' };
+      case 'upscale': return { label: '超分修复', icon: 'maximize' };
+      default: return { label: '节点', icon: 'square' };
+    }
   }
 
   function renderNode(node) {
@@ -389,8 +450,9 @@
     el.setAttribute('data-type', node.type);
     el.style.cssText = 'position:absolute;left:' + node.x + 'px;top:' + node.y + 'px;width:' + node.width + 'px;';
 
-    var typeLabel = node.type === 'text' ? 'Text' : 'Sketch';
-    var typeIcon = node.type === 'text' ? 'type' : 'pencil';
+    var meta = nodeMeta(node.type);
+    var typeLabel = meta.label;
+    var typeIcon = meta.icon;
 
     var bodyHtml = '';
     if (node.type === 'text') {
@@ -398,21 +460,91 @@
         '<div class="nf-node-body">' +
           '<textarea class="nf-node-prompt" placeholder="描述你想要生成的画面内容，按 Enter 生成..." rows="3">' + node.prompt + '</textarea>' +
         '</div>';
-    } else {
+    } else if (node.type === 'sketch') {
       bodyHtml =
         '<div class="nf-node-body">' +
           '<div class="nf-node-sketch-area" data-sketch-for="' + node.id + '">' +
-            '<canvas class="nf-sketch-canvas" width="280" height="160"></canvas>' +
+            '<canvas class="nf-sketch-canvas" width="280" height="150"></canvas>' +
           '</div>' +
           '<div class="nf-node-strength">' +
             '<div class="nf-strength-row"><span>强度</span><span class="nf-strength-val">' + node.strength.toFixed(1) + '</span></div>' +
             '<input type="range" class="nf-strength-slider" min="0" max="1" step="0.1" value="' + node.strength + '">' +
           '</div>' +
         '</div>';
+    } else if (node.type === 'hd') {
+      bodyHtml =
+        '<div class="nf-node-body">' +
+          '<textarea class="nf-node-prompt" placeholder="描述画面内容，生成高清图..." rows="3">' + node.prompt + '</textarea>' +
+          '<div class="nf-node-strength">' +
+            '<div class="nf-strength-row"><span>分辨率</span></div>' +
+            '<div class="nf-res-row">' +
+              '<button type="button" class="nf-chip' + (node.hdSize === '1K' ? ' is-active' : '') + '" data-v="1K">1K</button>' +
+              '<button type="button" class="nf-chip' + (node.hdSize === '2K' ? ' is-active' : '') + '" data-v="2K">2K</button>' +
+              '<button type="button" class="nf-chip' + (node.hdSize === '4K' ? ' is-active' : '') + '" data-v="4K">4K</button>' +
+            '</div>' +
+          '</div>' +
+        '</div>';
+    } else if (node.type === 'video') {
+      bodyHtml =
+        '<div class="nf-node-body">' +
+          '<textarea class="nf-node-prompt" placeholder="描述视频画面内容（支持分镜、镜头运动、音效）..." rows="3">' + node.prompt + '</textarea>' +
+          '<div class="nf-node-strength">' +
+            '<div class="nf-strength-row"><span>时长</span><span class="nf-strength-val">' + node.videoDuration + 's</span></div>' +
+            '<input type="range" class="nf-video-slider" min="4" max="15" step="1" value="' + node.videoDuration + '">' +
+          '</div>' +
+          '<div class="nf-strength-row" style="margin-top:6px;"><span>分辨率</span></div>' +
+          '<div class="nf-res-row">' +
+            '<button type="button" class="nf-chip' + (node.videoResolution === '768P' ? ' is-active' : '') + '" data-v="768P">768P</button>' +
+            '<button type="button" class="nf-chip' + (node.videoResolution === '2K' ? ' is-active' : '') + '" data-v="2K">2K</button>' +
+          '</div>' +
+          '<div class="nf-strength-row" style="margin-top:6px;"><span>画幅</span></div>' +
+          '<div class="nf-res-row">' +
+            '<button type="button" class="nf-chip' + (node.videoRatio === '16:9' ? ' is-active' : '') + '" data-v="16:9">16:9</button>' +
+            '<button type="button" class="nf-chip' + (node.videoRatio === '9:16' ? ' is-active' : '') + '" data-v="9:16">9:16</button>' +
+            '<button type="button" class="nf-chip' + (node.videoRatio === '1:1' ? ' is-active' : '') + '" data-v="1:1">1:1</button>' +
+          '</div>' +
+          '<div class="nf-strength-row" style="margin-top:8px;">' +
+            '<span>加速生成</span>' +
+            '<label class="nf-switch"><input type="checkbox" class="nf-accel-toggle"' + (node.videoAccelerate !== false ? ' checked' : '') + '><i></i></label>' +
+          '</div>' +
+        '</div>';
+    } else if (node.type === 'upscale') {
+      bodyHtml =
+        '<div class="nf-node-body">' +
+          '<div class="nf-strength-row"><span>放大倍数</span></div>' +
+          '<div class="nf-res-row">' +
+            '<button type="button" class="nf-chip' + (node.upscaleScale === 2 ? ' is-active' : '') + '" data-v="2">2x</button>' +
+            '<button type="button" class="nf-chip' + (node.upscaleScale === 4 ? ' is-active' : '') + '" data-v="4">4x</button>' +
+          '</div>' +
+          '<div class="nf-strength-row" style="margin-top:6px;">' +
+            '<span>人脸修复</span>' +
+            '<label class="nf-switch"><input type="checkbox" class="nf-face-toggle"' + (node.upscaleFaceEnhance ? ' checked' : '') + '><i></i></label>' +
+          '</div>' +
+          '<div class="nf-upscale-hint">输入左侧上游节点图片，生成超分修复结果</div>' +
+        '</div>';
     }
 
-    var resultHtml = node.resultImage ?
-      '<div class="nf-node-result"><img src="' + node.resultImage + '" alt="result" /></div>' : '';
+    var resultHtml = '';
+    if (node.resultVideo) {
+      if (node.resultVideo.indexOf('data:image/svg') === 0) {
+        resultHtml = '<div class="nf-node-result"><img src="' + node.resultVideo + '" alt="video-result" /></div>';
+      } else {
+        resultHtml = '<div class="nf-node-result"><video src="' + node.resultVideo + '" controls muted loop autoplay playsinline></video></div>';
+      }
+    } else if (node.resultImage) {
+      resultHtml = '<div class="nf-node-result"><img src="' + node.resultImage + '" alt="result" /></div>';
+    }
+
+    var foot = '<div class="nf-node-foot">' +
+        '<button type="button" class="nf-node-stylebtn" data-action="style">' +
+          '<span class="nf-node-styledot"></span>' +
+          '<span class="nf-node-stylename">' + state.currentStyleLabel + '</span>' +
+        '</button>' +
+        '<button type="button" class="nf-node-generate" data-action="generate">' +
+          '<i data-lucide="sparkles" width="14" height="14"></i>' +
+          '<span>生成</span>' +
+        '</button>' +
+      '</div>';
 
     el.innerHTML =
       '<div class="nf-node-head">' +
@@ -422,16 +554,7 @@
       '</div>' +
       bodyHtml +
       resultHtml +
-      '<div class="nf-node-foot">' +
-        '<button type="button" class="nf-node-stylebtn" data-action="style">' +
-          '<span class="nf-node-styledot"></span>' +
-          '<span class="nf-node-stylename">' + state.currentStyleLabel + '</span>' +
-        '</button>' +
-        '<button type="button" class="nf-node-generate" data-action="generate">' +
-          '<i data-lucide="sparkles" width="14" height="14"></i>' +
-          '<span>生成</span>' +
-        '</button>' +
-      '</div>' +
+      foot +
       /* ports */
       '<div class="nf-node-port nf-port-in" data-port="in"></div>' +
       '<div class="nf-node-port nf-port-out" data-port="out"></div>';
@@ -451,6 +574,7 @@
   }
 
   function bindNodeInteractions(el, node) {
+    var usePointer = typeof window.PointerEvent === 'function';
     /* Delete */
     el.querySelector('.nf-node-delete').addEventListener('click', function (e) {
       e.stopPropagation();
@@ -494,16 +618,68 @@
       slider.addEventListener('click', function (e) { e.stopPropagation(); });
     }
 
+    /* Video duration slider */
+    var vSlider = el.querySelector('.nf-video-slider');
+    if (vSlider) {
+      vSlider.addEventListener('input', function () {
+        node.videoDuration = parseInt(vSlider.value, 10);
+        var val = el.querySelector('.nf-strength-val');
+        if (val) val.textContent = node.videoDuration + 's';
+      });
+      vSlider.addEventListener('click', function (e) { e.stopPropagation(); });
+    }
+
+    /* Chip selectors (resolution / scale / ratio) */
+    el.querySelectorAll('.nf-chip').forEach(function (chip) {
+      chip.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var v = chip.getAttribute('data-v');
+        var row = chip.parentElement;
+        row.querySelectorAll('.nf-chip').forEach(function (c) { c.classList.remove('is-active'); });
+        chip.classList.add('is-active');
+        if (node.type === 'hd') {
+          if (v === '1K' || v === '2K' || v === '4K') node.hdSize = v;
+        } else if (node.type === 'video') {
+          if (v === '768P' || v === '2K') node.videoResolution = v;
+          if (v === '16:9' || v === '9:16' || v === '1:1') node.videoRatio = v;
+        } else if (node.type === 'upscale') {
+          if (v === '2' || v === '4') node.upscaleScale = parseInt(v, 10);
+        }
+      });
+    });
+
+    /* Face enhance toggle */
+    var faceToggle = el.querySelector('.nf-face-toggle');
+    if (faceToggle) {
+      faceToggle.addEventListener('change', function () {
+        node.upscaleFaceEnhance = faceToggle.checked;
+      });
+      faceToggle.addEventListener('click', function (e) { e.stopPropagation(); });
+    }
+
+    /* Video accelerate toggle */
+    var accelToggle = el.querySelector('.nf-accel-toggle');
+    if (accelToggle) {
+      accelToggle.addEventListener('change', function () {
+        node.videoAccelerate = accelToggle.checked;
+      });
+      accelToggle.addEventListener('click', function (e) { e.stopPropagation(); });
+    }
+
     /* Select on click */
     el.addEventListener('mousedown', function (e) {
       selectNode(node.id);
     });
 
-    /* Drag node by header */
+    /* Drag node by header — uses Pointer Events + pointer capture so the drag
+       keeps working even if the cursor strays outside the node, and is more
+       resilient to the preview environment intercepting plain mouse events. */
     var head = el.querySelector('.nf-node-head');
     if (head) {
-      head.addEventListener('mousedown', function (e) {
+      var usePointer = typeof window.PointerEvent === 'function';
+      function beginDrag(e) {
         if (e.target.closest('.nf-node-delete')) return;
+        if (e.button !== undefined && e.button !== 0) return;
         e.preventDefault();
         e.stopPropagation();
         var startX = e.clientX;
@@ -511,8 +687,10 @@
         var origX = node.x;
         var origY = node.y;
         var zoom = getCanvasZoom();
+        var active = true;
 
         function onMove(ev) {
+          if (!active) return;
           var dx = (ev.clientX - startX) / zoom;
           var dy = (ev.clientY - startY) / zoom;
           node.x = origX + dx;
@@ -523,26 +701,52 @@
           updateMinimap();
         }
         function onUp() {
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
+          if (!active) return;
+          active = false;
+          if (usePointer) {
+            try { head.releasePointerCapture(e.pointerId); } catch (err) { /* noop */ }
+            head.removeEventListener('pointermove', onMove);
+            head.removeEventListener('pointerup', onUp);
+            head.removeEventListener('pointercancel', onUp);
+          } else {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          }
         }
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-      });
+
+        if (usePointer) {
+          try { head.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
+          head.addEventListener('pointermove', onMove);
+          head.addEventListener('pointerup', onUp);
+          head.addEventListener('pointercancel', onUp);
+        } else {
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        }
+      }
+      head.addEventListener(usePointer ? 'pointerdown' : 'mousedown', beginDrag);
     }
 
     /* Port interactions */
     var outPort = el.querySelector('.nf-port-out');
     var inPort = el.querySelector('.nf-port-in');
     if (outPort) {
-      outPort.addEventListener('mousedown', function (e) {
+      outPort.addEventListener(usePointer ? 'pointerdown' : 'mousedown', function (e) {
         e.stopPropagation();
         e.preventDefault();
-        startConnectionDrag(node.id, e.clientX, e.clientY);
+        startConnectionDrag(node.id, e.clientX, e.clientY, e, false);
       });
     }
     if (inPort) {
-      inPort.addEventListener('mouseup', function (e) {
+      /* Dragging outward from the input port also opens the add-node menu,
+         and the new node connects INTO this node (new → this). */
+      inPort.addEventListener(usePointer ? 'pointerdown' : 'mousedown', function (e) {
+        e.stopPropagation();
+        e.preventDefault();
+        startConnectionDrag(node.id, e.clientX, e.clientY, e, true);
+      });
+      /* Legacy: dropping a dragged connection onto this input port */
+      inPort.addEventListener(usePointer ? 'pointerup' : 'mouseup', function (e) {
         e.stopPropagation();
         e.preventDefault();
         finishConnectionDrag(node.id);
@@ -616,7 +820,7 @@
 
     /* Draw dragging connection */
     if (_draggingConn) {
-      var fromPos = getPortPos(_draggingConn.fromNodeId, 'out');
+      var fromPos = getPortPos(_draggingConn.fromNodeId, _draggingConn.port || 'out');
       if (fromPos) {
         var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('d', bezierPath(fromPos.x, fromPos.y, _draggingConn.x, _draggingConn.y));
@@ -630,15 +834,18 @@
     }
   }
 
-  function startConnectionDrag(fromId, clientX, clientY) {
+  function startConnectionDrag(fromId, clientX, clientY, evt, reverse) {
     var region = document.getElementById('excalidraw-canvas-region');
     if (!region) return;
     var r = region.getBoundingClientRect();
     var zoom = getCanvasZoom();
     var pan = window.nfState || {};
+    var srcPort = region.querySelector('[data-node-id="' + fromId + '"] .nf-port-' + (reverse ? 'in' : 'out'));
+    var usePointer = typeof window.PointerEvent === 'function' && evt && evt.pointerId !== undefined;
 
     _draggingConn = {
       fromNodeId: fromId,
+      port: reverse ? 'in' : 'out',
       x: (clientX - r.left - (pan.panX || 0)) / zoom,
       y: (clientY - r.top - (pan.panY || 0)) / zoom
     };
@@ -650,24 +857,49 @@
       redrawConnections();
     }
     function onUp(ev) {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      /* Check if dropped on an input port */
+      if (usePointer && srcPort) {
+        try { srcPort.releasePointerCapture(ev.pointerId); } catch (err) { /* noop */ }
+        srcPort.removeEventListener('pointermove', onMove);
+        srcPort.removeEventListener('pointerup', onUp);
+        srcPort.removeEventListener('pointercancel', onUp);
+      } else {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+      }
+      /* Check if dropped on an input port (only for output-port drags) */
       var target = document.elementFromPoint(ev.clientX, ev.clientY);
-      if (target && target.classList.contains('nf-port-in')) {
+      var connected = false;
+      if (!reverse && target && target.classList.contains('nf-port-in')) {
         var nodeEl = target.closest('[data-node-id]');
         if (nodeEl) {
           var toId = nodeEl.getAttribute('data-node-id');
           if (toId && toId !== fromId) {
             addConnection(fromId, toId);
+            connected = true;
           }
         }
       }
+      /* If released on empty canvas (not on an input port), show add node menu */
+      var onNode = target && target.closest('.nf-canvas-node');
+      if (!connected && !onNode) {
+        setTimeout(function () {
+          showAddNodeMenu(ev.clientX, ev.clientY, fromId, reverse);
+        }, 10);
+      }
       _draggingConn = null;
       redrawConnections();
+      updateMinimap();
     }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
+
+    if (usePointer && srcPort) {
+      try { srcPort.setPointerCapture(evt.pointerId); } catch (err) { /* noop */ }
+      srcPort.addEventListener('pointermove', onMove);
+      srcPort.addEventListener('pointerup', onUp);
+      srcPort.addEventListener('pointercancel', onUp);
+    } else {
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    }
     redrawConnections();
   }
 
@@ -688,6 +920,26 @@
     state.connections.push({ from: fromId, to: toId });
     redrawConnections();
     updateMinimap();
+  }
+
+  /* 返回 id 的直接上游节点 (to === id), 取最近的连接 */
+  function getUpstreamNode(id) {
+    var conn = null;
+    /* 找最后一条指向 id 的连接 */
+    for (var i = state.connections.length - 1; i >= 0; i--) {
+      if (state.connections[i].to === id) { conn = state.connections[i]; break; }
+    }
+    if (!conn) return null;
+    return state.nodes.find(function (n) { return n.id === conn.from; }) || null;
+  }
+
+  /* 返回上游节点生成的第一张可用图片 (图生视频首帧 / 超分输入) */
+  function getUpstreamImage(id) {
+    var up = getUpstreamNode(id);
+    if (!up) return null;
+    if (up.resultImage) return up.resultImage;
+    /* 递归向上找更上游的图片 */
+    return getUpstreamImage(up.id);
   }
 
   function initSketchCanvas(el, node) {
@@ -811,6 +1063,46 @@
           NF.api.generateImg2Img(fd).then(resolve, reject);
         }, 'image/png');
       });
+    } else if (node.type === 'hd') {
+      /* 高清图: 用高清模型 (HD) 生成高分辨率图像 */
+      apiCall = NF.api.generateHd({
+        prompt: payload.prompt,
+        size: node.hdSize || '2K',
+        aspect_ratio: payload.aspect_ratio,
+        style: payload.style,
+        mode: payload.mode
+      });
+    } else if (node.type === 'video') {
+      /* 视频生成: MinMax H3, 支持文生视频与上游图生视频(首帧) */
+      var videoPayload = {
+        prompt: payload.prompt,
+        duration: node.videoDuration || 5,
+        resolution: node.videoResolution || '768P',
+        ratio: node.videoRatio || '16:9',
+        accelerate: node.videoAccelerate != null ? node.videoAccelerate : true
+      };
+      /* 若有上游图片节点, 用它作为首帧 (图生视频) */
+      var upstream = getUpstreamNode(node.id);
+      if (upstream && upstream.resultImage) {
+        videoPayload.first_frame_image = upstream.resultImage;
+      }
+      apiCall = NF.api.generateVideo(videoPayload);
+    } else if (node.type === 'upscale') {
+      /* 超分修复: 以上游节点图片为输入做放大/修复 */
+      var upInput = getUpstreamImage(node.id);
+      if (!upInput) {
+        node.status = 'idle';
+        el.classList.remove('is-generating');
+        var loader = el.querySelector('.nf-node-loading');
+        if (loader) loader.remove();
+        showToast('请先在上游节点生成一张图片');
+        return;
+      }
+      apiCall = NF.api.generateUpscale({
+        image: upInput,
+        scale: node.upscaleScale || 2,
+        face_enhance: node.upscaleFaceEnhance != null ? node.upscaleFaceEnhance : true
+      });
     } else {
       apiCall = NF.api.generateText2Img(payload);
     }
@@ -818,7 +1110,13 @@
     apiCall.then(function (res) {
       node.status = res.ok ? 'done' : 'error';
       if (res.ok) {
-        node.resultImage = res.data.image;
+        if (res.data.video) {
+          node.resultVideo = res.data.video;
+          node.resultImage = null;
+        } else {
+          node.resultImage = res.data.image;
+          node.resultVideo = null;
+        }
         node.seed = res.data.seed;
         node.generationTime = res.data.generation_time_sec;
         /* Show warnings */
@@ -857,6 +1155,17 @@
       resultDiv.innerHTML = '<img src="' + node.resultImage + '" alt="result" />';
       var body = el.querySelector('.nf-node-body');
       if (body) body.appendChild(resultDiv);
+    } else if (node.resultVideo) {
+      var vDiv = document.createElement('div');
+      vDiv.className = 'nf-node-result';
+      /* mock 返回的是 SVG 占位图(非真实 mp4), 用 img 展示; 真实后端返回 mp4 用 video 播放 */
+      if (node.resultVideo.indexOf('data:image/svg') === 0) {
+        vDiv.innerHTML = '<img src="' + node.resultVideo + '" alt="video-result" />';
+      } else {
+        vDiv.innerHTML = '<video src="' + node.resultVideo + '" controls muted loop autoplay playsinline></video>';
+      }
+      var vBody = el.querySelector('.nf-node-body');
+      if (vBody) vBody.appendChild(vDiv);
     }
 
     /* Node height changed — update connections */
@@ -1270,6 +1579,7 @@
   NF.app.selectNode = selectNode;
   NF.app.redrawConnections = redrawConnections;
   NF.app.addConnection = addConnection;
+  NF.app.showAddNodeMenu = showAddNodeMenu;
 
   /* Auto-init when DOM is ready */
   if (document.readyState === 'loading') {

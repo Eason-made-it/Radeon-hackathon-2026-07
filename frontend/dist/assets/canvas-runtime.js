@@ -632,6 +632,8 @@
         'center, center, center, ' + bgX + 'px ' + bgY + 'px';
       region.style.backgroundSize = '100% 100%, 100% 100%, 100% 100%, ' + dotSize + 'px ' + dotSize + 'px';
       redrawConnections();
+      /* Redraw minimap immediately on every pan/zoom instead of a polling loop */
+      if (window.__nfMinimapRefresh) window.__nfMinimapRefresh();
     }
 
     region.addEventListener('wheel', function (e) {
@@ -1531,7 +1533,7 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
 .nf-minimap canvas{display:block;width:100%;height:100%;cursor:pointer;}
 .nf-minimap-label{position:absolute;top:5px;left:9px;font-size:9px;color:var(--nf-text-3);text-transform:uppercase;letter-spacing:.05em;pointer-events:none;z-index:2;}
 .nf-minimap-count{position:absolute;top:5px;left:50%;transform:translateX(-50%);font-size:9px;color:var(--nf-text-2);letter-spacing:.03em;pointer-events:none;z-index:2;font-variant-numeric:tabular-nums;background:rgba(255,255,255,.05);padding:1px 7px;border-radius:8px;}
-.nf-minimap-viewport{position:absolute;display:none;border:1px solid rgba(255,255,255,.85);background:transparent;box-shadow:0 0 0 9999px rgba(0,0,0,.55);pointer-events:none;border-radius:2px;z-index:3;}
+.nf-minimap-viewport{position:absolute;display:none;border:1.5px solid rgba(255,255,255,.9);background:rgba(255,255,255,.14);pointer-events:none;border-radius:2px;z-index:3;box-shadow:0 0 6px rgba(0,0,0,.5),inset 0 0 0 rgba(0,0,0,.2);}
 .nf-minimap-fit{position:absolute;right:5px;top:5px;width:22px;height:22px;border:none;border-radius:6px;background:rgba(255,255,255,.06);color:var(--nf-text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:4;transition:background-color 150ms,color 150ms;}
 .nf-minimap-fit:hover{background:var(--nf-text-1);color:var(--nf-ink-0);}
 /* Floating "return to content" pill — appears when the user pans away and gets lost */
@@ -1615,11 +1617,14 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
     region.appendChild(returnPill);
     if (typeof lucide !== 'undefined') lucide.createIcons();
 
-    /* Open/collapse on click + hover */
+    /* Open/collapse on click. IMPORTANT: do NOT bind an auto-open on the trigger's
+       mouseenter. That would fire before the click on the same interaction and
+       make every click toggle the panel closed right after opening (the classic
+       "opens then immediately closes" bug). Stay open by clicking the trigger,
+       close by clicking the trigger again or clicking anywhere outside. */
     function open() { container.classList.add('is-open'); trigger.classList.add('is-active'); draw(); }
     function close() { container.classList.remove('is-open'); trigger.classList.remove('is-active'); }
     trigger.addEventListener('click', function (e) { e.stopPropagation(); container.classList.contains('is-open') ? close() : open(); });
-    trigger.addEventListener('mouseenter', open);
     container.addEventListener('mouseenter', open);
     container.addEventListener('mouseleave', function (e) { if (!wrap.contains(e.relatedTarget)) close(); });
     document.addEventListener('mousedown', function (e) { if (!wrap.contains(e.target)) close(); });
@@ -1646,6 +1651,24 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
       return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
     }
 
+    /* World bounds for the minimap — the shown region scales with the current
+       zoom: zoom in → world shrinks → content magnifies; zoom out → world grows
+       → content shrinks. The region is always at least ~2.5x the current
+       viewport (in world coords), so the viewport rectangle stays a stable
+       fraction of the map while node sizes visibly track the zoom level. */
+    function getWorldBounds() {
+      var b = getContentBounds();
+      var r = region.getBoundingClientRect();
+      var vw = state.zoom > 0 ? r.width / state.zoom : r.width;
+      var vh = state.zoom > 0 ? r.height / state.zoom : r.height;
+      var minW = Math.max(vw * 2.5, 300);
+      var minH = Math.max(vh * 2.5, 300);
+      var cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
+      var w = Math.max(b.maxX - b.minX, minW);
+      var h = Math.max(b.maxY - b.minY, minH);
+      return { minX: cx - w / 2, minY: cy - h / 2, maxX: cx + w / 2, maxY: cy + h / 2 };
+    }
+
     function draw() {
       var w = canvas.width, h = canvas.height;
       ctx.fillStyle = '#0a0a0a';
@@ -1658,7 +1681,7 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
       /* Fit the whole content into the minimap so node sizes and relative
          positions are always visible, independent of the zoom level.
          The viewport rectangle below then shows where you are. */
-      var bounds = getContentBounds();
+      var bounds = getWorldBounds();
       var bw = bounds.maxX - bounds.minX;
       var bh = bounds.maxY - bounds.minY;
       if (bw <= 0 || bh <= 0) return;
@@ -1677,7 +1700,12 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
         var rw = Math.max(3, cw * scale);
         var rh = Math.max(3, ch * scale);
         ctx.fillStyle = n.classList.contains('nf-selected') || n.classList.contains('is-selected') ? '#ffffff' : '#8b93a1';
-        ctx.fillRect(px - rw / 2, py - rh / 2, Math.max(3, rw + 4), Math.max(3, rh + 4));
+        /* Anchor the node rect at its top-left corner (px,py) — this matches the
+           connection endpoints and the viewport rectangle, both of which are
+           anchored at their top-left. Previously the rect was centered on the
+           node's top-left corner, which shifted every node by half its size and
+           broke alignment with the viewport box and connection lines. */
+        ctx.fillRect(px, py, rw, rh);
       });
 
       /* Connections — read from nodeflow-app's single connection model */
@@ -1747,7 +1775,7 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
       var rect = canvas.getBoundingClientRect();
       var mx = e.clientX - rect.left;
       var my = e.clientY - rect.top;
-      var bounds = getContentBounds();
+      var bounds = getWorldBounds();
       var bw = bounds.maxX - bounds.minX;
       var bh = bounds.maxY - bounds.minY;
       var scale = Math.min(canvas.width / bw, canvas.height / bh);
@@ -1823,14 +1851,10 @@ body.nf-mode-quick .dock-sep:nth-of-type(1){display:none!important;}
       observer.observe(content, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
     }
 
-    /* Pan/zoom changes → redraw (interval check mirrors the controller's apply) */
-    var lastPan = { x: state.panX, y: state.panY, z: state.zoom };
-    setInterval(function () {
-      if (lastPan.x !== state.panX || lastPan.y !== state.panY || lastPan.z !== state.zoom) {
-        lastPan = { x: state.panX, y: state.panY, z: state.zoom };
-        scheduleDraw();
-      }
-    }, 100);
+    /* Pan/zoom changes → redraw. The main canvas apply() now calls this hook
+       directly on every frame, so we no longer need a polling loop. This hook
+       is also used as a safety net for any state change that bypasses apply(). */
+    window.__nfMinimapRefresh = scheduleDraw;
 
     /* Initial draw + resize (draw immediately so count/content are never stale) */
     draw();
